@@ -311,11 +311,11 @@ class ActivityManagerTests: XCTestCase {
 // 1. 在 Entitlements 中添加 App Groups
 
 // 2. 使用 UserDefaults 共享
-let sharedDefaults = UserDefaults(suiteName: "group.zhaohaowei.FocusLive")
+let sharedDefaults = UserDefaults(suiteName: "group.com.QingTeng.FocusLive")
 sharedDefaults?.set(data, forKey: "tasks")
 
 // 3. 在 Intent 中读取
-let sharedDefaults = UserDefaults(suiteName: "group.zhaohaowei.FocusLive")
+let sharedDefaults = UserDefaults(suiteName: "group.com.QingTeng.FocusLive")
 if let data = sharedDefaults?.data(forKey: "tasks") {
     // 解析并更新主 App
 }

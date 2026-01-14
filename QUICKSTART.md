@@ -36,7 +36,7 @@ open FocusLive.xcodeproj
 ```xml
 <key>com.apple.security.application-groups</key>
 <array>
-    <string>group.zhaohaowei.FocusLive</string>
+    <string>group.com.QingTeng.FocusLive</string>
 </array>
 ```
 

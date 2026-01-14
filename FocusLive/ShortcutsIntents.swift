@@ -12,7 +12,7 @@ import WidgetKit
 import os.log
 
 /// App Group 标识符
-private let appGroupID = "group.zhaohaowei.FocusLive"
+private let appGroupID = "group.com.QingTeng.FocusLive"
 
 /// 统一日志记录器（可在 Xcode Console 和 Mac Console.app 中查看）
 private let logger = Logger(subsystem: "com.zhaohaowei.FocusLive", category: "Shortcuts")

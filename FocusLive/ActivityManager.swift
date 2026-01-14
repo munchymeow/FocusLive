@@ -11,7 +11,9 @@ import SwiftUI
 import SwiftData
 
 /// App Group 标识符
-private let appGroupID = "group.zhaohaowei.FocusLive"
+private let appGroupID = "group.com.QingTeng.FocusLive"
+private let allowedGroupIDsKey = "liveActivityAllowedGroupIDs"
+private let proStatusKey = "isProUser"
 
 /// 待同步的任务变更记录
 struct PendingTaskChange: Codable {
@@ -44,9 +46,20 @@ final class ActivityManager {
         // 提取所有运行中 Activity 的 groupID
         let runningGroupIDs = Set(runningActivities.map { $0.attributes.groupID })
         
-        // 筛选出有效分组（有未完成任务的分组）
-        let validGroups = groups.filter { group in
-            !group.tasks.isEmpty && group.incompleteTasks.count > 0
+        let allowedGroupIDs = resolvedAllowedGroupIDs(for: groups)
+        let isProUser = currentProStatus()
+        let orderedGroups = orderedGroups(from: groups)
+        
+        // 筛选出有效分组（有未完成且非隐私任务的分组）
+        var validGroups = orderedGroups.filter { group in
+            guard allowedGroupIDs.contains(group.id.uuidString) else { return false }
+            let publicTasks = publicTasks(for: group)
+            let publicIncomplete = publicTasks.filter { !$0.isCompleted }
+            return !publicTasks.isEmpty && !publicIncomplete.isEmpty
+        }
+        
+        if !isProUser, let firstGroup = validGroups.first {
+            validGroups = [firstGroup]
         }
         
         // 提取所有有效分组的 ID
@@ -81,15 +94,19 @@ final class ActivityManager {
             // 如果该 Activity 对应的分组不在有效分组列表中
             if !validGroupIDs.contains(groupID) {
                 // 检查原因
-                if let group = groups.first(where: { $0.id.uuidString == groupID }) {
-                    if group.tasks.isEmpty {
-                        print("   ❌ 分组 '\(group.title)' 为空，结束 Activity")
-                    } else if group.incompleteTasks.count == 0 {
-                        print("   🎉 分组 '\(group.title)' 已全部完成，结束 Activity")
-                    }
+            if let group = groups.first(where: { $0.id.uuidString == groupID }) {
+                let publicTasks = publicTasks(for: group)
+                let publicIncomplete = publicTasks.filter { !$0.isCompleted }
+                if publicTasks.isEmpty {
+                    print("   🔒 分组 '\(group.title)' 仅含隐私任务，结束 Activity")
+                } else if publicIncomplete.isEmpty {
+                    print("   🎉 分组 '\(group.title)' 已全部完成，结束 Activity")
                 } else {
-                    print("   ❌ 分组 ID '\(groupID)' 已删除，结束对应 Activity")
+                    print("   ❌ 分组 '\(group.title)' 不满足显示条件，结束 Activity")
                 }
+            } else {
+                print("   ❌ 分组 ID '\(groupID)' 已删除，结束对应 Activity")
+            }
                 endActivity(groupID: groupID)
             }
         }
@@ -103,18 +120,19 @@ final class ActivityManager {
     private func startActivity(for group: TaskGroup) {
         let groupIDString = group.id.uuidString
         let attributes = FocusAttributes(groupID: groupIDString)
+        let publicTasks = publicTasks(for: group)
         let contentState = FocusAttributes.ContentState(
             groupTitle: group.title,
             groupIcon: group.iconName,
-            tasks: group.sortedTasks.map { TaskItemSnapshot(from: $0) }
+            tasks: publicTasks.map { TaskItemSnapshot(from: $0) }
         )
         
         print("═══════════════════════════════════════════")
         print("📱 [ActivityManager] 创建 Live Activity")
         print("   📌 groupID: \(groupIDString)")
         print("   📌 groupTitle: \(group.title)")
-        print("   📋 任务列表:")
-        for task in group.sortedTasks {
+        print("   📋 任务列表(非隐私):")
+        for task in publicTasks {
             print("      - id: \(task.id.uuidString)")
             print("        title: \(task.title)")
             print("        completed: \(task.isCompleted)")
@@ -144,10 +162,11 @@ final class ActivityManager {
             return
         }
         
+        let publicTasks = publicTasks(for: group)
         let newState = FocusAttributes.ContentState(
             groupTitle: group.title,
             groupIcon: group.iconName,
-            tasks: group.sortedTasks.map { TaskItemSnapshot(from: $0) }
+            tasks: publicTasks.map { TaskItemSnapshot(from: $0) }
         )
         
         Task {
@@ -213,6 +232,40 @@ final class ActivityManager {
             }
         }
         print("🛑 所有 Activities 已结束")
+    }
+
+    /// 获取分组中可用于 Live Activity 的非隐私任务
+    /// - Parameter group: 任务分组
+    /// - Returns: 已按排序规则处理的非隐私任务
+    private func publicTasks(for group: TaskGroup) -> [TaskItem] {
+        guard !(group.isPrivate ?? false) else { return [] }
+        return group.sortedTasks.filter { !($0.isPrivate ?? false) }
+    }
+    
+    /// 获取按排序权重排序的分组列表
+    /// - Parameter groups: 原始分组列表
+    /// - Returns: 排序后的分组列表
+    private func orderedGroups(from groups: [TaskGroup]) -> [TaskGroup] {
+        groups.sorted { ($0.sortOrder ?? 0) < ($1.sortOrder ?? 0) }
+    }
+    
+    /// 获取允许显示的分组 ID 列表
+    /// - Parameter groups: 当前分组列表
+    /// - Returns: 允许显示的分组 ID 集合
+    private func resolvedAllowedGroupIDs(for groups: [TaskGroup]) -> Set<String> {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            return Set(groups.map { $0.id.uuidString })
+        }
+        if let stored = defaults.array(forKey: allowedGroupIDsKey) as? [String] {
+            return Set(stored)
+        }
+        return Set(groups.map { $0.id.uuidString })
+    }
+    
+    /// 获取当前会员状态
+    /// - Returns: 是否为会员
+    private func currentProStatus() -> Bool {
+        UserDefaults(suiteName: appGroupID)?.bool(forKey: proStatusKey) ?? false
     }
     
     // MARK: - Widget 变更同步

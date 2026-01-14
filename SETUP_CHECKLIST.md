@@ -11,14 +11,14 @@
 - [ ] Bundle Identifier: 确保唯一（如 `com.zhaohaowei.FocusLive`）
 - [ ] Signing & Capabilities: 
   - [ ] 添加 **App Groups** capability
-  - [ ] Group Name: `group.zhaohaowei.FocusLive`（需与代码中一致）
+  - [ ] Group Name: `group.com.QingTeng.FocusLive`（需与代码中一致）
 
 **Widget Extension (FocusWidget):**
 - [ ] Deployment Target: iOS 17.0 或更高
 - [ ] Bundle Identifier: 必须是主 App 的子路径（如 `com.zhaohaowei.FocusLive.FocusWidget`）
 - [ ] Signing & Capabilities:
   - [ ] 添加 **App Groups** capability
-  - [ ] Group Name: `group.zhaohaowei.FocusLive`（必须与主 App 完全一致）
+  - [ ] Group Name: `group.com.QingTeng.FocusLive`（必须与主 App 完全一致）
 
 #### ✅ Info.plist 配置
 
@@ -81,7 +81,7 @@ Cannot find type 'TaskItemSnapshot' in scope
 <dict>
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>group.zhaohaowei.FocusLive</string>
+        <string>group.com.QingTeng.FocusLive</string>
     </array>
 </dict>
 </plist>
@@ -95,7 +95,7 @@ Cannot find type 'TaskItemSnapshot' in scope
 <dict>
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>group.zhaohaowei.FocusLive</string>
+        <string>group.com.QingTeng.FocusLive</string>
     </array>
 </dict>
 </plist>

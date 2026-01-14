@@ -14,14 +14,31 @@ final class TaskItem {
     var id: UUID
     var title: String
     var isCompleted: Bool
+    var isPrivate: Bool?
     var dueDate: Date?
     var sortOrder: Int?
     var taskGroup: TaskGroup?
     
-    init(id: UUID = UUID(), title: String, isCompleted: Bool = false, dueDate: Date? = nil, sortOrder: Int? = 0) {
+    /// 初始化任务项目
+    /// - Parameters:
+    ///   - id: 任务唯一标识
+    ///   - title: 任务标题
+    ///   - isCompleted: 是否已完成
+    ///   - isPrivate: 是否为隐私任务
+    ///   - dueDate: 截止时间
+    ///   - sortOrder: 排序权重
+    init(
+        id: UUID = UUID(),
+        title: String,
+        isCompleted: Bool = false,
+        isPrivate: Bool = false,
+        dueDate: Date? = nil,
+        sortOrder: Int? = 0
+    ) {
         self.id = id
         self.title = title
         self.isCompleted = isCompleted
+        self.isPrivate = isPrivate
         self.dueDate = dueDate
         self.sortOrder = sortOrder
     }
@@ -33,13 +50,30 @@ final class TaskGroup {
     var id: UUID
     var title: String
     var iconName: String
+    var isPrivate: Bool?
     var sortOrder: Int?
     @Relationship(deleteRule: .cascade) var tasks: [TaskItem]
     
-    init(id: UUID = UUID(), title: String, iconName: String, sortOrder: Int? = 0, tasks: [TaskItem] = []) {
+    /// 初始化任务分组
+    /// - Parameters:
+    ///   - id: 分组唯一标识
+    ///   - title: 分组标题
+    ///   - iconName: 分组图标
+    ///   - isPrivate: 是否为隐私分组
+    ///   - sortOrder: 排序权重
+    ///   - tasks: 分组内任务
+    init(
+        id: UUID = UUID(),
+        title: String,
+        iconName: String,
+        isPrivate: Bool = false,
+        sortOrder: Int? = 0,
+        tasks: [TaskItem] = []
+    ) {
         self.id = id
         self.title = title
         self.iconName = iconName
+        self.isPrivate = isPrivate
         self.sortOrder = sortOrder
         self.tasks = tasks
     }

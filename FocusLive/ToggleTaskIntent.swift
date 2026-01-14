@@ -13,7 +13,7 @@ import AppIntents
 import ActivityKit
 
 /// App Group 标识符（用于数据共享）
-private let appGroupID = "group.zhaohaowei.FocusLive"
+private let appGroupID = "group.com.QingTeng.FocusLive"
 
 /// 切换任务完成状态的交互意图
 /// 用于 Live Activity 锁屏交互，点击小圆点标记任务完成

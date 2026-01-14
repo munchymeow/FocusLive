@@ -10,6 +10,11 @@ import ActivityKit
 import WidgetKit
 import AppIntents
 
+private let appGroupID = "group.com.QingTeng.FocusLive"
+private let liveActivityDisplayCountKey = "liveActivityMaxCount"
+private let liveActivityOpacityKey = "liveActivityBackgroundOpacity"
+private let proStatusKey = "isProUser"
+
 /// Live Activity Widget 视图
 struct FocusActivityWidget: Widget {
     var body: some WidgetConfiguration {
@@ -109,7 +114,30 @@ struct LockScreenLiveActivityView: View {
     
     /// 显示的任务数量（最多5项）
     private var displayTaskCount: Int {
-        min(context.state.incompleteTasks.count, 5)
+        min(context.state.incompleteTasks.count, maxDisplayCount)
+    }
+
+    /// 用户设置的最大显示条数
+    private var maxDisplayCount: Int {
+        let storedValue = UserDefaults(suiteName: appGroupID)?
+            .object(forKey: liveActivityDisplayCountKey) as? NSNumber
+        let defaultValue = isProUser ? 4 : 3
+        let value = storedValue?.intValue ?? defaultValue
+        let limit = isProUser ? 5 : 3
+        return min(max(value, 1), limit)
+    }
+    
+    /// 用户设置的背景透明度
+    private var backgroundOpacity: Double {
+        let storedValue = UserDefaults(suiteName: appGroupID)?
+            .object(forKey: liveActivityOpacityKey) as? NSNumber
+        let value = storedValue?.doubleValue ?? 0.9
+        return min(max(value, 0.4), 1.0)
+    }
+
+    /// 当前会员状态
+    private var isProUser: Bool {
+        UserDefaults(suiteName: appGroupID)?.bool(forKey: proStatusKey) ?? false
     }
     
     /// 根据任务数量计算头部字号
@@ -187,10 +215,10 @@ struct LockScreenLiveActivityView: View {
             }
             .padding(.horizontal, 4)
             
-            // 任务列表（最多显示 5 项，超出不提示）
+            // 任务列表（最多显示用户设置的条数）
             if !context.state.incompleteTasks.isEmpty {
                 VStack(alignment: .leading, spacing: taskSpacing) {
-                    ForEach(Array(context.state.incompleteTasks.prefix(5)), id: \.id) { task in
+                    ForEach(Array(context.state.incompleteTasks.prefix(displayTaskCount)), id: \.id) { task in
                         TaskRowView(
                             task: task,
                             groupID: context.attributes.groupID,
@@ -215,13 +243,13 @@ struct LockScreenLiveActivityView: View {
             }
             
             // 填充剩余空间，确保始终使用最大尺寸
-            if displayTaskCount < 5 {
+            if displayTaskCount < maxDisplayCount {
                 Spacer(minLength: 0)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
-        .activityBackgroundTint(Color(uiColor: .systemBackground).opacity(0.9))
+        .activityBackgroundTint(Color(uiColor: .systemBackground).opacity(backgroundOpacity))
         .activitySystemActionForegroundColor(Color.primary)
     }
 }
