@@ -102,7 +102,7 @@ struct ProfileView: View {
                         .scaledToFit()
                         .frame(height: 24)
                 }
-                Text(String(format: String(localized: "感谢您使用 FocusLive，这是它陪伴你的第 %lld 天"), Int64(dayCount())))
+                Text(String(format: String(localized: "感谢您使用 FocusScreen，这是它陪伴你的第 %lld 天"), Int64(dayCount())))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -137,7 +137,7 @@ struct ProfileView: View {
     /// - Returns: 分组视图
     private func sectionView<Content: View>(titleKey: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(titleKey)
+            Text(LocalizedStringKey(titleKey))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .padding(.leading, 6)
@@ -438,11 +438,11 @@ struct ProfileRow: View {
             
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(item.titleKey)
+                    Text(LocalizedStringKey(item.titleKey))
                         .font(.subheadline.weight(.semibold))
                     
                     if let badgeText = item.badgeTextKey {
-                        Text(badgeText)
+                        Text(LocalizedStringKey(badgeText))
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -452,7 +452,7 @@ struct ProfileRow: View {
                 }
                 
                 if let subtitle = item.subtitleKey {
-                    Text(subtitle)
+                    Text(LocalizedStringKey(subtitle))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -482,7 +482,7 @@ struct ProfilePlaceholderView: View {
     
     var body: some View {
         VStack(spacing: 12) {
-            Text(titleKey)
+            Text(LocalizedStringKey(titleKey))
                 .font(.title2.weight(.semibold))
             Text("该功能正在准备中")
                 .font(.subheadline)

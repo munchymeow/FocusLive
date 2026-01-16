@@ -14,7 +14,7 @@ struct SoftwareInfoView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("软件说明")
                         .font(.title2.weight(.semibold))
-                    Text("FocusLive 是一款基于实时活动的待办事项应用，可将分组任务同步到锁屏与灵动岛。")
+                    Text("FocusScreen 是一款基于实时活动的待办事项应用，可将分组任务同步到锁屏与灵动岛。")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -22,7 +22,7 @@ struct SoftwareInfoView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("使用提示")
                         .font(.headline)
-                    Text("请在系统设置中允许 FocusLive 的实时活动，以便在锁屏与灵动岛展示任务进度。")
+                    Text("请在系统设置中允许 FocusScreen 的实时活动，以便在锁屏与灵动岛展示任务进度。")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     

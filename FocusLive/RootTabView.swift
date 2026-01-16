@@ -91,7 +91,7 @@ struct TabBarButton: View {
             HStack(spacing: 6) {
                 Image(systemName: systemImage)
                     .font(.system(size: 14, weight: .semibold))
-                Text(titleKey)
+                Text(LocalizedStringKey(titleKey))
                     .font(.subheadline.weight(.semibold))
             }
             .foregroundStyle(isSelected ? .blue : .secondary)

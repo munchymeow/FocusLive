@@ -103,6 +103,8 @@ struct SubscriptionView: View {
                         .buttonStyle(.plain)
                     }
                     .padding(.top, 4)
+                    
+                    subscriptionInfoView
                 }
                 .padding(16)
             }
@@ -117,7 +119,7 @@ struct SubscriptionView: View {
     
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("FocusLive Pro")
+            Text("FocusScreen Pro")
                 .font(.title2.weight(.bold))
             
             Text("解锁隐私空间与锁屏卡片设置")
@@ -142,6 +144,16 @@ struct SubscriptionView: View {
             Text("选择你的版本")
                 .font(.headline)
             Text("订阅后可解锁更多功能与持续更新支持。")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+    
+    private var subscriptionInfoView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("订阅说明")
+                .font(.headline)
+            Text("订阅说明正文")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -179,7 +191,7 @@ struct SubscriptionView: View {
         if let productID = plan.productID, let product = storeKitManager.product(for: productID) {
             return product.displayPrice
         }
-        return plan.fallbackPriceKey
+        return NSLocalizedString(plan.fallbackPriceKey, comment: "")
     }
     
     /// 处理订阅按钮点击
@@ -204,7 +216,7 @@ struct SubscriptionView: View {
     /// - Parameters: 无
     /// - Returns: Void
     private func openUserService() {
-        guard let url = URL(string: "https://qingtengstudio.com/") else { return }
+        guard let url = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/") else { return }
         openURL(url)
     }
     
@@ -236,7 +248,7 @@ struct SubscriptionPlanCard: View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text(plan.titleKey)
+                    Text(LocalizedStringKey(plan.titleKey))
                         .font(.headline)
                     if plan.isRecommended {
                         Text("推荐")
@@ -252,8 +264,12 @@ struct SubscriptionPlanCard: View {
                         .foregroundStyle(.blue)
                 }
                 
-                Text(plan.subtitleKey)
+                Text(LocalizedStringKey(plan.subtitleKey))
                     .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                
+                Text(String(format: String(localized: "周期：%@"), periodText))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .padding(16)
@@ -274,7 +290,47 @@ struct SubscriptionPlanCard: View {
         if let product = product {
             return product.displayPrice
         }
-        return plan.fallbackPriceKey
+        return NSLocalizedString(plan.fallbackPriceKey, comment: "")
+    }
+    
+    /// 获取订阅周期描述
+    /// - Returns: 订阅周期文本
+    private var periodText: String {
+        if plan.productID == nil {
+            return String(localized: "永久免费")
+        }
+        if let period = product?.subscription?.subscriptionPeriod {
+            return periodDescription(period)
+        }
+        if plan.productID?.contains("monthly") == true {
+            return String(localized: "每月")
+        }
+        if plan.productID?.contains("yearly") == true {
+            return String(localized: "每年")
+        }
+        return String(localized: "按期")
+    }
+    
+    /// 订阅周期转为展示文案
+    /// - Parameter period: StoreKit 订阅周期
+    /// - Returns: 周期描述
+    private func periodDescription(_ period: Product.SubscriptionPeriod) -> String {
+        switch period.unit {
+        case .day:
+            return String(format: String(localized: "%lld 天"), Int64(period.value))
+        case .week:
+            return String(format: String(localized: "%lld 周"), Int64(period.value))
+        case .month:
+            return period.value == 1
+                ? String(localized: "每月")
+                : String(format: String(localized: "%lld 个月"), Int64(period.value))
+        case .year:
+            return period.value == 1
+                ? String(localized: "每年")
+                : String(format: String(localized: "%lld 年"), Int64(period.value))
+        @unknown default:
+            return String(localized: "按期")
+        }
     }
 }
 
@@ -288,7 +344,7 @@ struct SubscriptionActionRow: View {
                 .foregroundStyle(.blue)
                 .frame(width: 24, height: 24)
             
-            Text(titleKey)
+            Text(LocalizedStringKey(titleKey))
                 .font(.subheadline.weight(.semibold))
             
             Spacer()
