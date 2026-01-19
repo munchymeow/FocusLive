@@ -79,11 +79,11 @@ struct ProfileView: View {
                     VStack(spacing: 16) {
                         headerView
                         memberCard
-                        sectionView(titleKey: "通用") {
-                            liveActivityRow
-                        }
                         sectionView(titleKey: "个性化") {
                             liveActivitySettingsRow
+                        }
+                        sectionView(titleKey: "通用") {
+                            liveActivityRow
                         }
                         sectionView(titleKey: "其他") {
                             languageRow
