@@ -14,6 +14,7 @@ import SwiftData
 private let appGroupID = "group.com.QingTeng.FocusLive"
 private let allowedGroupIDsKey = "liveActivityAllowedGroupIDs"
 private let proStatusKey = "isProUser"
+private let smartReminderKey = "smartReminderEnabled"
 
 /// 待同步的任务变更记录
 struct PendingTaskChange: Codable {
@@ -50,12 +51,18 @@ final class ActivityManager {
         let isProUser = currentProStatus()
         let orderedGroups = orderedGroups(from: groups)
         
-        // 筛选出有效分组（有未完成且非隐私任务的分组）
+        // 筛选出有效分组（有未完成且非隐私任务的分组，且分组未完成）
         var validGroups = orderedGroups.filter { group in
             guard allowedGroupIDs.contains(group.id.uuidString) else { return false }
             let publicTasks = publicTasks(for: group)
             let publicIncomplete = publicTasks.filter { !$0.isCompleted }
             return !publicTasks.isEmpty && !publicIncomplete.isEmpty
+        }
+        
+        // 根据订阅状态限制分组数量
+        let maxGroups = isProUser ? 3 : 2
+        if validGroups.count > maxGroups {
+            validGroups = Array(validGroups.prefix(maxGroups))
         }
         
         if !isProUser, let firstGroup = validGroups.first {
@@ -112,6 +119,153 @@ final class ActivityManager {
         }
         
         print("✅ 同步完成！")
+        
+        // 检查并创建智能提醒（仅Pro用户且开启开关）
+        if isProUser && isSmartReminderEnabled() {
+            checkAndCreateSmartReminders(groups: groups)
+        }
+        
+        // 检查励志名言活动（如果没有分组活动）
+        checkAndCreateMotivationActivityIfNeeded()
+    }
+
+    /// 检查并创建智能提醒
+    /// - Parameter groups: 当前所有分组
+    func checkAndCreateSmartReminders(groups: [TaskGroup]) {
+        let now = Date()
+        var reminders: [(title: String, time: Date, priority: Priority)] = []
+        
+        // 检查分组提醒
+        for group in groups {
+            if let scheduledTime = group.scheduledTime,
+               let reminderType = group.reminderType,
+               reminderType != .none {
+                let reminderTime = calculateReminderTime(for: scheduledTime, reminderType: reminderType)
+                if reminderTime <= now && scheduledTime > now {
+                    reminders.append((
+                        title: "分组提醒: \(group.title)",
+                        time: scheduledTime,
+                        priority: group.priority ?? .medium
+                    ))
+                }
+            }
+        }
+        
+        // 检查任务提醒
+        for group in groups {
+            for task in group.tasks {
+                if let scheduledTime = task.scheduledTime,
+                   let reminderType = task.reminderType,
+                   reminderType != .none,
+                   !(task.isCompleted) {
+                    let reminderTime = calculateReminderTime(for: scheduledTime, reminderType: reminderType)
+                    if reminderTime <= now && scheduledTime > now {
+                        reminders.append((
+                            title: "任务提醒: \(task.title)",
+                            time: scheduledTime,
+                            priority: task.priority ?? .medium
+                        ))
+                    }
+                }
+            }
+        }
+        
+        // 按优先级和时间排序
+        reminders.sort { (a, b) in
+            if a.priority != b.priority {
+                return priorityValue(a.priority) > priorityValue(b.priority)
+            }
+            return a.time < b.time
+        }
+        
+        // 只显示最高优先级的提醒（Pro用户）
+        if let topReminder = reminders.first, currentProStatus() {
+            createSmartReminderActivity(reminder: topReminder)
+        }
+    }
+    
+    /// 计算提醒时间
+    private func calculateReminderTime(for scheduledTime: Date, reminderType: ReminderType) -> Date {
+        let calendar = Calendar.current
+        switch reminderType {
+        case .atTime:
+            return scheduledTime
+        case .before10min:
+            return calendar.date(byAdding: .minute, value: -10, to: scheduledTime) ?? scheduledTime
+        case .before30min:
+            return calendar.date(byAdding: .minute, value: -30, to: scheduledTime) ?? scheduledTime
+        case .before1hour:
+            return calendar.date(byAdding: .hour, value: -1, to: scheduledTime) ?? scheduledTime
+        case .before6hours:
+            return calendar.date(byAdding: .hour, value: -6, to: scheduledTime) ?? scheduledTime
+        case .before1day:
+            return calendar.date(byAdding: .day, value: -1, to: scheduledTime) ?? scheduledTime
+        case .before1week:
+            return calendar.date(byAdding: .day, value: -7, to: scheduledTime) ?? scheduledTime
+        case .none:
+            return scheduledTime
+        }
+    }
+    
+    /// 获取优先级数值（用于排序）
+    private func priorityValue(_ priority: Priority) -> Int {
+        switch priority {
+        case .urgent: return 4
+        case .high: return 3
+        case .medium: return 2
+        case .low: return 1
+        }
+    }
+    
+    /// 创建智能提醒Activity
+    private func createSmartReminderActivity(reminder: (title: String, time: Date, priority: Priority)) {
+        let reminderID = "smart_reminder_\(UUID().uuidString)"
+        let attributes = FocusAttributes(groupID: reminderID)
+        
+        let timeInterval = reminder.time.timeIntervalSinceNow
+        let countdownText: String
+        if timeInterval <= 0 {
+            countdownText = "时间已到！"
+        } else if timeInterval < 3600 { // 不到1小时
+            let minutes = Int(timeInterval / 60)
+            countdownText = "还剩 \(minutes) 分钟"
+        } else if timeInterval < 86400 { // 不到1天
+            let hours = Int(timeInterval / 3600)
+            let minutes = Int((timeInterval.truncatingRemainder(dividingBy: 3600)) / 60)
+            countdownText = "还剩 \(hours)小时\(minutes)分钟"
+        } else {
+            let days = Int(timeInterval / 86400)
+            countdownText = "还剩 \(days) 天"
+        }
+        
+        let contentState = FocusAttributes.ContentState(
+            groupTitle: reminder.title,
+            groupIcon: "⏰",
+            tasks: [
+                TaskItemSnapshot(
+                    id: "countdown",
+                    title: countdownText,
+                    isCompleted: false
+                )
+            ]
+        )
+        
+        do {
+            let activity = try Activity.request(
+                attributes: attributes,
+                content: .init(state: contentState, staleDate: nil),
+                pushType: nil
+            )
+            print("🔔 智能提醒 Activity 已创建: \(reminder.title)")
+            
+            // 设置自动结束时间
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(max(timeInterval, 60)) * 1_000_000_000)
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
+        } catch {
+            print("⚠️ 创建智能提醒失败: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Activity 操作方法
@@ -268,6 +422,67 @@ final class ActivityManager {
         UserDefaults(suiteName: appGroupID)?.bool(forKey: proStatusKey) ?? false
     }
     
+    /// 获取智能提醒开关状态
+    /// - Returns: 是否开启智能提醒
+    private func isSmartReminderEnabled() -> Bool {
+        UserDefaults(suiteName: appGroupID)?.bool(forKey: smartReminderKey) ?? false
+    }
+
+    /// 检查是否有活跃的分组活动
+    /// - Returns: 是否有分组活动正在运行
+    func hasActiveGroupActivities() -> Bool {
+        let runningActivities = Activity<FocusAttributes>.activities
+        return runningActivities.contains { !$0.attributes.groupID.hasPrefix("motivation_") }
+    }
+    
+    /// 创建励志名言活动
+    /// - Parameters:
+    ///   - quote: 名言文本
+    ///   - author: 作者（可选）
+    func createMotivationActivity(quote: String, author: String?) {
+        let motivationID = "motivation_\(UUID().uuidString)"
+        let attributes = FocusAttributes(groupID: motivationID)
+        
+        // 格式化名言显示
+        let displayText = quote
+        let authorText = author != nil ? "\n——\(author!)" : ""
+        let fullText = displayText + authorText
+        
+        let contentState = FocusAttributes.ContentState(
+            groupTitle: "每日鼓励",
+            groupIcon: "💡",
+            tasks: [
+                TaskItemSnapshot(
+                    id: "quote",
+                    title: fullText,
+                    isCompleted: false
+                )
+            ]
+        )
+        
+        do {
+            let activity = try Activity.request(
+                attributes: attributes,
+                content: .init(state: contentState, staleDate: nil),
+                pushType: nil
+            )
+            print("💡 励志名言 Activity 已创建")
+        } catch {
+            print("⚠️ 创建励志名言 Activity 失败: \(error.localizedDescription)")
+        }
+    }
+    
+    /// 结束励志名言活动
+    func endMotivationActivity() {
+        let runningActivities = Activity<FocusAttributes>.activities
+        for activity in runningActivities where activity.attributes.groupID.hasPrefix("motivation_") {
+            Task {
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
+        }
+        print("💡 励志名言 Activity 已结束")
+    }
+    
     // MARK: - Widget 变更同步
     
     /// 从 App Groups 读取并应用 Widget 中的任务变更
@@ -346,5 +561,66 @@ final class ActivityManager {
         
         let pendingChanges = defaults.array(forKey: "pendingTaskChanges") as? [[String: Any]] ?? []
         return !pendingChanges.isEmpty
+    }
+
+    /// 检查并创建励志名言活动（如果需要）
+    private func checkAndCreateMotivationActivityIfNeeded() {
+        let defaults = UserDefaults(suiteName: appGroupID)
+        let isEnabled = defaults?.bool(forKey: "dailyMotivationEnabled") ?? true
+        
+        guard isEnabled else {
+            endMotivationActivity()
+            return
+        }
+        
+        // 检查是否有活跃的分组活动
+        let hasActiveGroupActivities = hasActiveGroupActivities()
+        if hasActiveGroupActivities {
+            // 如果有分组活动，结束名言活动
+            endMotivationActivity()
+            return
+        }
+        
+        // 检查是否需要更新名言（每天更换）
+        let lastDate = defaults?.object(forKey: "lastMotivationDate") as? Date
+        let today = Calendar.current.startOfDay(for: Date())
+        
+        if lastDate == nil || !Calendar.current.isDate(lastDate!, inSameDayAs: today) {
+            // 需要更新名言
+            createMotivationActivityFromCSV()
+        }
+    }
+    
+    /// 从CSV文件创建励志名言活动
+    private func createMotivationActivityFromCSV() {
+        guard let url = Bundle.main.url(forResource: "motivational_quotes", withExtension: "csv"),
+              let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return
+        }
+        
+        let quotes = content.components(separatedBy: .newlines)
+            .filter { !$0.isEmpty }
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        
+        guard !quotes.isEmpty else { return }
+        
+        let defaults = UserDefaults(suiteName: appGroupID)
+        var currentIndex = defaults?.integer(forKey: "currentMotivationIndex") ?? 0
+        
+        // 获取当前名言
+        let quote = quotes[currentIndex]
+        
+        // 更新索引（循环）
+        currentIndex = (currentIndex + 1) % quotes.count
+        defaults?.set(currentIndex, forKey: "currentMotivationIndex")
+        defaults?.set(Date(), forKey: "lastMotivationDate")
+        
+        // 解析名言格式："名言"——作者
+        let components = quote.components(separatedBy: "——")
+        let quoteText = components.first?.trimmingCharacters(in: CharacterSet.whitespaces) ?? quote
+        let author = components.count > 1 ? components.last?.trimmingCharacters(in: CharacterSet.whitespaces) : nil
+        
+        // 创建名言活动
+        createMotivationActivity(quote: quoteText, author: author)
     }
 }

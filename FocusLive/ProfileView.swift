@@ -39,11 +39,40 @@ struct ProfileView: View {
             ? Color(red: 0.15, green: 0.15, blue: 0.18)
             : Color.white
     }
+
+    private var ambientBackground: some View {
+        ZStack {
+            backgroundColor
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.cyan.opacity(0.25), Color.blue.opacity(0.18)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 240, height: 240)
+                .blur(radius: 40)
+                .offset(x: -140, y: -220)
+            
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.mint.opacity(0.18), Color.blue.opacity(0.12)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 220, height: 220)
+                .blur(radius: 50)
+                .offset(x: 140, y: 260)
+        }
+    }
     
     var body: some View {
         NavigationStack {
             ZStack {
-                backgroundColor
+                ambientBackground
                     .ignoresSafeArea()
                 
                 ScrollView {
@@ -92,23 +121,32 @@ struct ProfileView: View {
     }
     
     private var headerView: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text("你好")
-                        .font(.system(size: 28, weight: .bold))
-                    Image("logo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: 24)
-                }
-                Text(String(format: String(localized: "感谢您使用 FocusScreen，这是它陪伴你的第 %lld 天"), Int64(dayCount())))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("你好")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                Image("logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 22)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .multilineTextAlignment(.leading)
+            
+            Text(String(format: String(localized: "感谢您使用 FocusScreen，这是它陪伴你的第 %lld 天"), Int64(dayCount())))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 22)
+                .fill(cardBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22)
+                        .stroke(Color.white.opacity(colorScheme == .dark ? 0.08 : 0.6), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.08), radius: 14, x: 0, y: 6)
+        )
     }
     
     private var memberCard: some View {
@@ -138,7 +176,7 @@ struct ProfileView: View {
     private func sectionView<Content: View>(titleKey: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(LocalizedStringKey(titleKey))
-                .font(.subheadline)
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.leading, 6)
             
@@ -174,28 +212,17 @@ struct ProfileView: View {
                 iconName: "square.grid.2x2.fill",
                 iconColor: .orange,
                 trailingTextKey: nil,
-                badgeTextKey: "Pro"
+                badgeTextKey: nil
             ),
             cardBackground: cardBackground
         )
         
-        if isProUser {
-            return AnyView(
-                NavigationLink {
-                    LiveActivitySettingsView()
-                } label: {
-                    row
-                }
-                .buttonStyle(.plain)
-            )
-        } else {
-            return AnyView(
-                Button(action: { showSubscription = true }) {
-                    row
-                }
-                .buttonStyle(.plain)
-            )
+        return NavigationLink {
+            LiveActivitySettingsView()
+        } label: {
+            row
         }
+        .buttonStyle(.plain)
     }
     
     private var languageRow: some View {
@@ -426,15 +453,25 @@ struct ProfileItem: Identifiable {
 }
 
 struct ProfileRow: View {
+    @Environment(\.colorScheme) private var colorScheme
     let item: ProfileItem
     let cardBackground: Color
     
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: item.iconName)
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(item.iconColor))
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(
+                        LinearGradient(
+                            colors: [item.iconColor.opacity(0.9), item.iconColor.opacity(0.55)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 36, height: 36)
+                Image(systemName: item.iconName)
+                    .foregroundStyle(.white)
+            }
             
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
@@ -461,7 +498,7 @@ struct ProfileRow: View {
             Spacer()
             
             if let trailing = item.trailingTextKey {
-                Text(trailing)
+                Text(LocalizedStringKey(trailing))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.blue)
             }
@@ -473,6 +510,11 @@ struct ProfileRow: View {
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(cardBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.white.opacity(colorScheme == .dark ? 0.08 : 0.6), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.3 : 0.06), radius: 10, x: 0, y: 4)
         )
     }
 }

@@ -42,6 +42,18 @@ struct SubscriptionView: View {
         colorScheme == .dark ? Color.black : Color(uiColor: .systemGroupedBackground)
     }
     
+    private var surfaceFill: Color {
+        colorScheme == .dark ? Color.white.opacity(0.06) : Color.white
+    }
+    
+    private var surfaceStroke: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
+    }
+    
+    private var surfaceShadow: Color {
+        colorScheme == .dark ? Color.black.opacity(0.4) : Color.black.opacity(0.08)
+    }
+    
     var body: some View {
         ZStack {
             backgroundColor
@@ -58,7 +70,11 @@ struct SubscriptionView: View {
                                 plan: plan,
                                 product: plan.productID.flatMap { storeKitManager.product(for: $0) },
                                 isSelected: selectedPlanID == plan.productID,
-                                onSelect: { selectedPlanID = plan.productID }
+                                onSelect: {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                        selectedPlanID = plan.productID
+                                    }
+                                }
                             )
                         }
                     }
@@ -70,7 +86,9 @@ struct SubscriptionView: View {
                             .padding(.vertical, 12)
                             .background(
                                 Capsule()
-                                    .fill(primaryActionEnabled ? Color.blue : Color.gray.opacity(0.3))
+                                    .fill(primaryActionEnabled
+                                          ? LinearGradient(colors: [Color.blue, Color.cyan], startPoint: .leading, endPoint: .trailing)
+                                          : LinearGradient(colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.25)], startPoint: .leading, endPoint: .trailing))
                             )
                             .foregroundStyle(primaryActionEnabled ? .white : .secondary)
                     }
@@ -118,45 +136,68 @@ struct SubscriptionView: View {
     }
     
     private var headerView: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("FocusScreen Pro")
-                .font(.title2.weight(.bold))
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 22)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.blue.opacity(0.9), Color.cyan.opacity(0.7)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                )
             
-            Text("解锁隐私空间与锁屏卡片设置")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 10) {
+                Text(LocalizedStringKey("FocusScreen Pro"))
+                    .font(.title2.weight(.bold))
+                Text(LocalizedStringKey("解锁隐私空间与锁屏卡片设置"))
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+            .padding(20)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(
-            LinearGradient(
-                colors: [Color.blue.opacity(0.85), Color.cyan.opacity(0.7)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .foregroundStyle(.white)
     }
     
     private var featureList: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("选择你的版本")
+            Text(LocalizedStringKey("选择你的版本"))
                 .font(.headline)
-            Text("订阅后可解锁更多功能与持续更新支持。")
+            Text(LocalizedStringKey("订阅后可解锁更多功能与持续更新支持。"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(surfaceFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(surfaceStroke, lineWidth: 1)
+                )
+        )
+        .shadow(color: surfaceShadow, radius: 10, x: 0, y: 4)
     }
     
     private var subscriptionInfoView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("订阅说明")
+            Label(LocalizedStringKey("订阅说明"), systemImage: "info.circle.fill")
                 .font(.headline)
-            Text("订阅说明正文")
-                .font(.subheadline)
+            Text(LocalizedStringKey("订阅说明正文"))
+                .font(.footnote)
                 .foregroundStyle(.secondary)
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(surfaceFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(surfaceStroke, lineWidth: 1)
+                )
+        )
     }
     
     private var selectedPlan: SubscriptionPlan? {
@@ -239,49 +280,70 @@ struct SubscriptionPlan: Identifiable {
 }
 
 struct SubscriptionPlanCard: View {
+    @Environment(\.colorScheme) private var colorScheme
     let plan: SubscriptionPlan
     let product: Product?
     let isSelected: Bool
     let onSelect: () -> Void
     
+    private var cardFill: Color {
+        colorScheme == .dark ? Color.white.opacity(0.06) : Color.white
+    }
+    
+    private var cardStroke: Color {
+        isSelected
+            ? Color.blue
+            : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
+    }
+    
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(LocalizedStringKey(plan.titleKey))
-                        .font(.headline)
-                    if plan.isRecommended {
-                        Text("推荐")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(Color.blue.opacity(0.15)))
-                            .foregroundStyle(.blue)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text(LocalizedStringKey(plan.titleKey))
+                            .font(.headline)
+                        if plan.isRecommended {
+                            Text(LocalizedStringKey("推荐"))
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.blue.opacity(0.15)))
+                                .foregroundStyle(.blue)
+                        }
                     }
-                    Spacer()
-                    Text(priceText)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.blue)
+                    
+                    Text(LocalizedStringKey(plan.subtitleKey))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    
+                    Text(String(format: String(localized: "周期：%@"), periodText))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 
-                Text(LocalizedStringKey(plan.subtitleKey))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Spacer()
                 
-                Text(String(format: String(localized: "周期：%@"), periodText))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text(priceText)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.primary)
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(isSelected ? .blue : .secondary)
+                }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(uiColor: .secondarySystemBackground))
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(cardFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(cardStroke, lineWidth: isSelected ? 1.5 : 1)
+                    )
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
-            )
+            .shadow(color: Color.black.opacity(isSelected ? 0.12 : 0.06), radius: 10, x: 0, y: 4)
         }
         .buttonStyle(.plain)
     }

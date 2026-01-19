@@ -477,6 +477,67 @@ struct ContentView: View {
             }
         }
     }
+    
+    /// 检查并创建励志名言活动
+    private func checkAndCreateMotivationActivity() {
+        let defaults = UserDefaults(suiteName: appGroupID)
+        let isEnabled = defaults?.bool(forKey: "dailyMotivationEnabled") ?? true
+        
+        guard isEnabled else {
+            ActivityManager.shared.endMotivationActivity()
+            return
+        }
+        
+        // 检查是否有活跃的分组活动
+        let hasActiveGroupActivities = ActivityManager.shared.hasActiveGroupActivities()
+        if hasActiveGroupActivities {
+            // 如果有分组活动，结束名言活动
+            ActivityManager.shared.endMotivationActivity()
+            return
+        }
+        
+        // 检查是否需要更新名言（每天更换）
+        let lastDate = defaults?.object(forKey: "lastMotivationDate") as? Date
+        let today = Calendar.current.startOfDay(for: Date())
+        
+        if lastDate == nil || !Calendar.current.isDate(lastDate!, inSameDayAs: today) {
+            // 需要更新名言
+            createMotivationActivity()
+        }
+    }
+    
+    /// 创建励志名言活动
+    private func createMotivationActivity() {
+        guard let url = Bundle.main.url(forResource: "motivational_quotes", withExtension: "csv"),
+              let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return
+        }
+        
+        let quotes = content.components(separatedBy: .newlines)
+            .filter { !$0.isEmpty }
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        
+        guard !quotes.isEmpty else { return }
+        
+        let defaults = UserDefaults(suiteName: appGroupID)
+        var currentIndex = defaults?.integer(forKey: "currentMotivationIndex") ?? 0
+        
+        // 获取当前名言
+        let quote = quotes[currentIndex]
+        
+        // 更新索引（循环）
+        currentIndex = (currentIndex + 1) % quotes.count
+        defaults?.set(currentIndex, forKey: "currentMotivationIndex")
+        defaults?.set(Date(), forKey: "lastMotivationDate")
+        
+        // 解析名言格式："名言"——作者
+        let components = quote.components(separatedBy: "——")
+        let quoteText = components.first?.trimmingCharacters(in: .whitespaces) ?? quote
+        let author = components.count > 1 ? components.last?.trimmingCharacters(in: .whitespaces) : nil
+        
+        // 创建名言活动
+        ActivityManager.shared.createMotivationActivity(quote: quoteText, author: author)
+    }
 
     // MARK: - 空状态视图
     private var emptyStateView: some View {
@@ -495,7 +556,7 @@ struct ContentView: View {
             }
             
             Button(action: addSampleData) {
-                HStack(spacing: 8) {
+                HStack(spacing: 24) {
                     Image(systemName: "sparkles")
                     Text("添加示例数据")
                         .fontWeight(.medium)
@@ -583,6 +644,9 @@ struct ContentView: View {
     private func syncActivitiesWithGroups() {
         Task { @MainActor in
             ActivityManager.shared.syncActivities(groups: taskGroups)
+            
+            // 检查励志名言活动
+            checkAndCreateMotivationActivity()
         }
     }
     
@@ -735,7 +799,7 @@ struct ContentView: View {
 let commonEmojis = [
     // 工作/办公
     "💼", "🗂️", "📁", "📋", "📊", "📈", "💹", "🖥️",
-    "💻", "⌨️", "🖨️", "📠", "📞", "☎️", "📧", "✉️",
+    "💻", "⌨️", "🖨️", "Fax", "📞", "☎️", "📧", "✉️",
     "📝", "✍️", "🖊️", "📌", "📍", "🗓️", "📅", "📆",
     // 学习/教育
     "📚", "📖", "📕", "📗", "📘", "📙", "📓", "📔",
@@ -775,7 +839,7 @@ struct TaskGroupCard: View {
     let allowsTaskReorder: Bool
     let isProUser: Bool
     let onRequireSubscription: () -> Void
-    var onMoveUp: () -> Void = {}
+    var onMoveUp: () -> Void = {}    // 修复：语法正确应该是闭包类型，如 {} 或 { _: TaskGroup in }
     var onMoveDown: () -> Void = {}
     var canMoveUp: Bool = true
     var canMoveDown: Bool = true
@@ -784,6 +848,7 @@ struct TaskGroupCard: View {
     @State private var isEditingTitle = false
     @State private var editedTitle = ""
     @State private var showIconPicker = false
+    @State private var showAdvancedGroupEditor = false
     
     /// 排序后的任务列表
     private var sortedTasks: [TaskItem] {
@@ -980,12 +1045,18 @@ struct TaskGroupCard: View {
                 .fill(cardBackground)
         )
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.3 : 0.06), radius: 12, x: 0, y: 4)
-        .sheet(isPresented: $showIconPicker) {
-            IconPickerView(selectedIcon: $group.iconName) {
-                try? modelContext.save()
-                updateLiveActivity()
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive, action: deleteGroup) {
+                Label("删除", systemImage: "trash")
             }
         }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            Button(action: { showAdvancedGroupEditor = true }) {
+                Label("高级设置", systemImage: "gear")
+            }
+            .tint(.blue)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20))
         .contextMenu {
             Button(action: { showIconPicker = true }) {
                 Label("更换图标", systemImage: "face.smiling")
@@ -996,6 +1067,10 @@ struct TaskGroupCard: View {
                 isEditingTitle = true
             }) {
                 Label("编辑名称", systemImage: "pencil")
+            }
+            
+            Button(action: { showAdvancedGroupEditor = true }) {
+                Label("高级设置", systemImage: "gear")
             }
             
             if canMoveUp {
@@ -1143,16 +1218,25 @@ struct TaskRow: View {
     let onRequireSubscription: () -> Void
     var onMoveUp: () -> Void = {}
     var onMoveDown: () -> Void = {}
-    var canMoveUp: Bool = true
-    var canMoveDown: Bool = true
+    var canMoveUp: Bool = false
+    var canMoveDown: Bool = false
     
     @State private var isEditing = false
     @State private var editedTitle = ""
     @State private var showDatePicker = false
+    @State private var showAdvancedEditor = false
     
     /// 格式化日期
     private var formattedDate: String? {
         guard let date = task.dueDate else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d HH:mm"
+        return formatter.string(from: date)
+    }
+    
+    /// 格式化计划时间
+    private var formattedScheduledTime: String? {
+        guard let date = task.scheduledTime else { return nil }
         let formatter = DateFormatter()
         formatter.dateFormat = "M/d HH:mm"
         return formatter.string(from: date)
@@ -1221,6 +1305,17 @@ struct TaskRow: View {
                             Text("⏰")
                                 .font(.system(size: 11))
                             Text(dateStr)
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    
+                    // 显示计划时间
+                    if let scheduledTimeStr = formattedScheduledTime {
+                        HStack(spacing: 4) {
+                            Text("📅")
+                                .font(.system(size: 11))
+                            Text(scheduledTimeStr)
                                 .font(.caption)
                                 .foregroundStyle(.orange)
                         }
@@ -1313,6 +1408,9 @@ struct TaskRow: View {
                 onUpdate()
             }
         }
+        .sheet(isPresented: $showAdvancedEditor) {
+            AdvancedTaskEditor(task: task, modelContext: modelContext, onUpdate: onUpdate)
+        }
     }
     
     private func toggleTask() {
@@ -1393,6 +1491,225 @@ struct DatePickerSheet: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - 高级任务编辑器
+struct AdvancedTaskEditor: View {
+    @Bindable var task: TaskItem
+    let modelContext: ModelContext
+    let onUpdate: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedScheduledTime: Date = Date()
+    @State private var selectedReminderType: ReminderType = .none
+    @State private var selectedPriority: Priority = .medium
+    @State private var selectedRepeatType: RepeatType = .none
+    @State private var repeatInterval: Int = 1
+    @State private var attachments: [Attachment] = []
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("计划时间")) {
+                    Toggle("设置计划时间", isOn: Binding(
+                        get: { task.scheduledTime != nil },
+                        set: { if $0 { task.scheduledTime = selectedScheduledTime } else { task.scheduledTime = nil } }
+                    ))
+                    
+                    if task.scheduledTime != nil {
+                        DatePicker("计划时间", selection: Binding(
+                            get: { task.scheduledTime ?? Date() },
+                            set: { task.scheduledTime = $0; selectedScheduledTime = $0 }
+                        ), displayedComponents: [.date, .hourAndMinute])
+                    }
+                }
+                
+                Section(header: Text("重复")) {
+                    Picker("重复类型", selection: $selectedRepeatType) {
+                        Text("不重复").tag(RepeatType.none)
+                        Text("每天").tag(RepeatType.daily)
+                        Text("每周").tag(RepeatType.weekly)
+                        Text("每月").tag(RepeatType.monthly)
+                        Text("每年").tag(RepeatType.yearly)
+                    }
+                    
+                    if selectedRepeatType != .none {
+                        Stepper("间隔: \(repeatInterval)", value: $repeatInterval, in: 1...30)
+                    }
+                }
+                
+                Section(header: Text("提醒")) {
+                    Picker("提醒类型", selection: $selectedReminderType) {
+                        Text("无提醒").tag(ReminderType.none)
+                        Text("准时提醒").tag(ReminderType.atTime)
+                        Text("提前10分钟").tag(ReminderType.before10min)
+                        Text("提前30分钟").tag(ReminderType.before30min)
+                        Text("提前1小时").tag(ReminderType.before1hour)
+                        Text("提前6小时").tag(ReminderType.before6hours)
+                        Text("提前1天").tag(ReminderType.before1day)
+                        Text("提前1周").tag(ReminderType.before1week)
+                    }
+                }
+                
+                Section(header: Text("优先级")) {
+                    Picker("优先级", selection: $selectedPriority) {
+                        Text("低").tag(Priority.low)
+                        Text("中").tag(Priority.medium)
+                        Text("高").tag(Priority.high)
+                        Text("紧急").tag(Priority.urgent)
+                    }
+                }
+                
+                Section(header: Text("附件")) {
+                    ForEach(attachments.indices, id: \.self) { index in
+                        HStack {
+                            Text(attachments[index].title)
+                            Spacer()
+                            Button(action: { attachments.remove(at: index) }) {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                    
+                    Button(action: addAttachment) {
+                        Label("添加附件", systemImage: "plus")
+                    }
+                }
+            }
+            .navigationTitle("高级设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("保存") {
+                        saveChanges()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                selectedScheduledTime = task.scheduledTime ?? Date()
+                selectedReminderType = task.reminderType ?? .none
+                selectedPriority = task.priority ?? .medium
+                selectedRepeatType = task.repeatType ?? .none
+                repeatInterval = task.repeatInterval ?? 1
+                attachments = task.attachments ?? []
+            }
+        }
+    }
+    
+    private func saveChanges() {
+        task.repeatType = selectedRepeatType == .none ? nil : selectedRepeatType
+        task.repeatInterval = selectedRepeatType == .none ? nil : repeatInterval
+        task.reminderType = selectedReminderType == .none ? nil : selectedReminderType
+        task.priority = selectedPriority
+        
+        try? modelContext.save()
+        onUpdate()
+    }
+    
+    private func addAttachment() {
+        // 这里可以实现添加附件的逻辑
+        // 暂时添加一个示例附件
+        let newAttachment = Attachment(
+            id: UUID(),
+            type: .link,
+            url: "https://example.com",
+            title: "示例链接"
+        )
+        attachments.append(newAttachment)
+    }
+}
+
+// MARK: - 高级分组编辑器
+struct AdvancedGroupEditor: View {
+    @Bindable var group: TaskGroup
+    let modelContext: ModelContext
+    let onUpdate: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedScheduledTime: Date = Date()
+    @State private var selectedReminderType: ReminderType = .none
+    @State private var selectedPriority: Priority = .medium
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("计划时间")) {
+                    Toggle("设置计划时间", isOn: Binding(
+                        get: { group.scheduledTime != nil },
+                        set: { if $0 { group.scheduledTime = selectedScheduledTime } else { group.scheduledTime = nil } }
+                    ))
+                    
+                    if group.scheduledTime != nil {
+                        DatePicker("计划时间", selection: Binding(
+                            get: { group.scheduledTime ?? Date() },
+                            set: { group.scheduledTime = $0; selectedScheduledTime = $0 }
+                        ), displayedComponents: [.date, .hourAndMinute])
+                    }
+                }
+                
+                Section(header: Text("提醒")) {
+                    Picker("提醒类型", selection: $selectedReminderType) {
+                        Text("无提醒").tag(ReminderType.none)
+                        Text("准时提醒").tag(ReminderType.atTime)
+                        Text("提前10分钟").tag(ReminderType.before10min)
+                        Text("提前30分钟").tag(ReminderType.before30min)
+                        Text("提前1小时").tag(ReminderType.before1hour)
+                        Text("提前6小时").tag(ReminderType.before6hours)
+                        Text("提前1天").tag(ReminderType.before1day)
+                        Text("提前1周").tag(ReminderType.before1week)
+                    }
+                }
+                
+                Section(header: Text("优先级")) {
+                    Picker("优先级", selection: $selectedPriority) {
+                        Text("低").tag(Priority.low)
+                        Text("中").tag(Priority.medium)
+                        Text("高").tag(Priority.high)
+                        Text("紧急").tag(Priority.urgent)
+                    }
+                }
+            }
+            .navigationTitle("分组高级设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("取消") {
+                        dismiss()
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("保存") {
+                        saveChanges()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .onAppear {
+                selectedScheduledTime = group.scheduledTime ?? Date()
+                selectedReminderType = group.reminderType ?? .none
+                selectedPriority = group.priority ?? .medium
+            }
+        }
+    }
+    
+    private func saveChanges() {
+        group.reminderType = selectedReminderType == .none ? nil : selectedReminderType
+        group.priority = selectedPriority
+        
+        try? modelContext.save()
+        onUpdate()
     }
 }
 

@@ -14,6 +14,7 @@ private let appGroupID = "group.com.QingTeng.FocusLive"
 private let liveActivityDisplayCountKey = "liveActivityMaxCount"
 private let liveActivityOpacityKey = "liveActivityBackgroundOpacity"
 private let proStatusKey = "isProUser"
+private let compactViewKey = "compactViewEnabled"
 
 /// Live Activity Widget 视图
 struct FocusActivityWidget: Widget {
@@ -121,10 +122,18 @@ struct LockScreenLiveActivityView: View {
     private var maxDisplayCount: Int {
         let storedValue = UserDefaults(suiteName: appGroupID)?
             .object(forKey: liveActivityDisplayCountKey) as? NSNumber
-        let defaultValue = isProUser ? 4 : 3
+        let defaultValue = isCompactView ? 8 : (isProUser ? 4 : 3)
         let value = storedValue?.intValue ?? defaultValue
-        let limit = isProUser ? 5 : 3
+        let limit = isCompactView ? 8 : (isProUser ? 4 : 3)
         return min(max(value, 1), limit)
+    }
+    
+    /// 是否启用紧凑视图
+    private var isCompactView: Bool {
+        let userSetting = UserDefaults(suiteName: appGroupID)?.bool(forKey: compactViewKey) ?? false
+        let taskCount = context.state.incompleteTasks.count
+        // 超过4个任务时自动启用紧凑模式
+        return userSetting || taskCount > 4
     }
     
     /// 用户设置的背景透明度
@@ -132,7 +141,7 @@ struct LockScreenLiveActivityView: View {
         let storedValue = UserDefaults(suiteName: appGroupID)?
             .object(forKey: liveActivityOpacityKey) as? NSNumber
         let value = storedValue?.doubleValue ?? 0.9
-        return min(max(value, 0.4), 1.0)
+        return min(max(value, 0.0), 1.0)
     }
 
     /// 当前会员状态
@@ -143,18 +152,18 @@ struct LockScreenLiveActivityView: View {
     /// 根据任务数量计算头部字号
     private var headerIconSize: CGFloat {
         switch displayTaskCount {
-        case 0...1: return 22
-        case 2: return 20
-        case 3: return 18
+        case 0...2: return 22
+        case 3...5: return 20
+        case 6...8: return 18
         default: return 16
         }
     }
     
     private var headerFont: Font {
         switch displayTaskCount {
-        case 0...1: return .title3
-        case 2: return .headline
-        case 3: return .subheadline
+        case 0...2: return .title3
+        case 3...5: return .headline
+        case 6...8: return .subheadline
         default: return .subheadline
         }
     }
@@ -162,18 +171,18 @@ struct LockScreenLiveActivityView: View {
     /// 根据任务数量计算任务字号
     private var taskIconSize: CGFloat {
         switch displayTaskCount {
-        case 0...1: return 26
-        case 2: return 22
-        case 3: return 20
+        case 0...2: return 26
+        case 3...5: return 22
+        case 6...8: return 20
         default: return 18
         }
     }
     
     private var taskFont: Font {
         switch displayTaskCount {
-        case 0...1: return .title3
-        case 2: return .headline
-        case 3: return .body
+        case 0...2: return .title3
+        case 3...5: return .headline
+        case 6...8: return .body
         default: return .subheadline
         }
     }
@@ -181,16 +190,57 @@ struct LockScreenLiveActivityView: View {
     /// 任务行间距
     private var taskSpacing: CGFloat {
         switch displayTaskCount {
-        case 0...1: return 12
-        case 2: return 10
-        case 3: return 8
+        case 0...2: return 12
+        case 3...5: return 10
+        case 6...8: return 8
         default: return 6
+        }
+    }
+    
+    /// 紧凑模式图标大小
+    private var compactIconSize: CGFloat {
+        switch displayTaskCount {
+        case 0...4: return 16
+        case 5...6: return 14
+        case 7...8: return 12
+        default: return 12
+        }
+    }
+    
+    /// 紧凑模式字体
+    private var compactFont: Font {
+        switch displayTaskCount {
+        case 0...4: return .caption
+        case 5...6: return .caption2
+        case 7...8: return .caption2
+        default: return .caption2
+        }
+    }
+    
+    /// 紧凑模式行间距
+    private var compactRowSpacing: CGFloat {
+        switch displayTaskCount {
+        case 4: return 4  // 4个任务时稍微缩短间距
+        case 0...3: return 6
+        case 5...6: return 4
+        case 7...8: return 3
+        default: return 3
+        }
+    }
+    
+    /// 紧凑模式行高
+    private var compactRowHeight: CGFloat {
+        switch displayTaskCount {
+        case 0...4: return 24
+        case 5...6: return 20
+        case 7...8: return 18
+        default: return 18
         }
     }
     
     var body: some View {
         // 整体容器 - 始终使用最大尺寸
-        VStack(alignment: .leading, spacing: displayTaskCount <= 2 ? 14 : 10) {
+        VStack(alignment: .leading, spacing: displayTaskCount <= 3 ? 14 : (displayTaskCount <= 6 ? 10 : 8)) {
             // 头部：左边emoji+标题，右边进度
             HStack(alignment: .center) {
                 // 左上：emoji + 分组标题
@@ -217,24 +267,45 @@ struct LockScreenLiveActivityView: View {
             
             // 任务列表（最多显示用户设置的条数）
             if !context.state.incompleteTasks.isEmpty {
-                VStack(alignment: .leading, spacing: taskSpacing) {
-                    ForEach(Array(context.state.incompleteTasks.prefix(displayTaskCount)), id: \.id) { task in
-                        TaskRowView(
-                            task: task,
-                            groupID: context.attributes.groupID,
-                            iconSize: taskIconSize,
-                            font: taskFont
-                        )
-                        .padding(.horizontal, 4)
+                if isCompactView {
+                    // 紧凑模式：双列网格布局
+                    let tasks = Array(context.state.incompleteTasks.prefix(displayTaskCount))
+                    let columns = [GridItem(.flexible()), GridItem(.flexible())]
+                    let rows = min(Int(ceil(Double(tasks.count) / 2.0)), 5) // 最多5行
+                    
+                    LazyVGrid(columns: columns, spacing: compactRowSpacing) {
+                        ForEach(tasks.indices, id: \.self) { index in
+                            TaskRowView(
+                                task: tasks[index],
+                                groupID: context.attributes.groupID,
+                                iconSize: compactIconSize,
+                                font: compactFont
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .frame(maxHeight: CGFloat(rows) * (compactRowHeight + compactRowSpacing))
+                } else {
+                    // 普通模式：单列布局
+                    VStack(alignment: .leading, spacing: taskSpacing) {
+                        ForEach(Array(context.state.incompleteTasks.prefix(displayTaskCount)), id: \.id) { task in
+                            TaskRowView(
+                                task: task,
+                                groupID: context.attributes.groupID,
+                                iconSize: taskIconSize,
+                                font: taskFont
+                            )
+                            .padding(.horizontal, 4)
+                        }
                     }
                 }
             } else {
-                // 全部完成状态
+                // 全部完成状态或无任务状态
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: taskIconSize))
                         .foregroundStyle(.green)
-                    Text("全部完成！")
+                    Text(context.state.incompleteTasks.isEmpty && context.state.totalCount > 0 ? "全部完成！" : "暂无任务")
                         .font(taskFont)
                         .fontWeight(.medium)
                         .foregroundStyle(.green)
