@@ -17,24 +17,50 @@ struct SubscriptionView: View {
     private let plans: [SubscriptionPlan] = [
         SubscriptionPlan(
             titleKey: "免费版",
-            subtitleKey: "基础功能与锁屏实时活动",
+            subtitleKey: "基础功能体验",
             fallbackPriceKey: "免费",
             productID: nil,
-            isRecommended: false
+            isRecommended: false,
+            features: [
+                "最多创建 2 个分组",
+                "锁屏显示最多 3 个任务",
+                "基础任务管理功能",
+                "每日励志名言提醒"
+            ]
         ),
         SubscriptionPlan(
             titleKey: "月度会员",
-            subtitleKey: "解锁全部功能，按月订阅",
+            subtitleKey: "解锁全部高级功能",
             fallbackPriceKey: "月度",
             productID: "com.qingteng.FocusLive.pro.monthly",
-            isRecommended: false
+            isRecommended: false,
+            features: [
+                "最多创建 3 个分组",
+                "锁屏显示最多 8 个任务",
+                "隐私空间保护",
+                "智能提醒功能",
+                "任务时间和重复设置",
+                "任务优先级管理",
+                "任务附件支持",
+                "高级分组管理"
+            ]
         ),
         SubscriptionPlan(
             titleKey: "年度会员",
-            subtitleKey: "解锁全部功能，年度更优惠",
+            subtitleKey: "年度订阅更优惠",
             fallbackPriceKey: "年度",
             productID: "com.qingteng.FocusLive.pro.yearly",
-            isRecommended: true
+            isRecommended: true,
+            features: [
+                "最多创建 3 个分组",
+                "锁屏显示最多 8 个任务",
+                "隐私空间保护",
+                "智能提醒功能",
+                "任务时间和重复设置",
+                "任务优先级管理",
+                "任务附件支持",
+                "高级分组管理"
+            ]
         )
     ]
     
@@ -60,69 +86,17 @@ struct SubscriptionView: View {
                 .ignoresSafeArea()
             
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 24) {
                     headerView
-                    featureList
                     
-                    VStack(spacing: 12) {
-                        ForEach(plans) { plan in
-                            SubscriptionPlanCard(
-                                plan: plan,
-                                product: plan.productID.flatMap { storeKitManager.product(for: $0) },
-                                isSelected: selectedPlanID == plan.productID,
-                                onSelect: {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                                        selectedPlanID = plan.productID
-                                    }
-                                }
-                            )
-                        }
-                    }
+                    // 免费版卡片
+                    freePlanCard
                     
-                    Button(action: handlePrimaryAction) {
-                        Text(primaryActionTitle)
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                Capsule()
-                                    .fill(primaryActionEnabled
-                                          ? LinearGradient(colors: [Color.blue, Color.cyan], startPoint: .leading, endPoint: .trailing)
-                                          : LinearGradient(colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.25)], startPoint: .leading, endPoint: .trailing))
-                            )
-                            .foregroundStyle(primaryActionEnabled ? .white : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!primaryActionEnabled)
+                    // Pro版卡片
+                    proPlanCards
                     
-                    VStack(spacing: 10) {
-                        Button(action: restorePurchases) {
-                            SubscriptionActionRow(
-                                titleKey: "恢复购买",
-                                iconName: "arrow.clockwise.circle.fill"
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        
-                        Button(action: openUserService) {
-                            SubscriptionActionRow(
-                                titleKey: "用户服务",
-                                iconName: "person.fill.checkmark"
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        
-                        Button(action: openPrivacyPolicy) {
-                            SubscriptionActionRow(
-                                titleKey: "隐私声明",
-                                iconName: "hand.raised.fill"
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 4)
-                    
-                    subscriptionInfoView
+                    // 底部操作区域
+                    bottomActions
                 }
                 .padding(16)
             }
@@ -136,49 +110,198 @@ struct SubscriptionView: View {
     }
     
     private var headerView: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 22)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.blue.opacity(0.9), Color.cyan.opacity(0.7)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+        VStack(alignment: .leading, spacing: 16) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.9), Color.cyan.opacity(0.7)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
-            
-            VStack(alignment: .leading, spacing: 10) {
-                Text(LocalizedStringKey("FocusScreen Pro"))
-                    .font(.title2.weight(.bold))
-                Text(LocalizedStringKey("解锁隐私空间与锁屏卡片设置"))
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.9))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22)
+                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    )
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(LocalizedStringKey("FocusScreen Pro"))
+                        .font(.title2.weight(.bold))
+                    Text(LocalizedStringKey("解锁隐私空间与锁屏卡片设置"))
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.9))
+                }
+                .padding(20)
             }
-            .padding(20)
+            
+            Text(LocalizedStringKey("选择适合你的版本"))
+                .font(.headline)
+                .foregroundStyle(.secondary)
         }
     }
     
-    private var featureList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(LocalizedStringKey("选择你的版本"))
-                .font(.headline)
-            Text(LocalizedStringKey("订阅后可解锁更多功能与持续更新支持。"))
-                .font(.subheadline)
+    private var freePlanCard: some View {
+        let freePlan = plans.first { $0.productID == nil }!
+        
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("免费版")
+                .font(.title3.weight(.bold))
+            
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(freePlan.features, id: \.self) { feature in
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .frame(width: 20, height: 20)
+                        Text(feature)
+                            .font(.subheadline)
+                    }
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.green.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.green.opacity(0.2), lineWidth: 1)
+                    )
+            )
+            
+            Text("当前版本")
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.gray.opacity(0.1))
+                )
                 .foregroundStyle(.secondary)
         }
-        .padding(16)
+        .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 18)
+            RoundedRectangle(cornerRadius: 20)
                 .fill(surfaceFill)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18)
+                    RoundedRectangle(cornerRadius: 20)
                         .stroke(surfaceStroke, lineWidth: 1)
                 )
         )
-        .shadow(color: surfaceShadow, radius: 10, x: 0, y: 4)
+        .shadow(color: surfaceShadow, radius: 12, x: 0, y: 6)
+    }
+    
+    private var proPlanCards: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Pro 会员")
+                .font(.title3.weight(.bold))
+            
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(plans.filter { $0.productID != nil }.first!.features, id: \.self) { feature in
+                    HStack(spacing: 12) {
+                        Image(systemName: "star.circle.fill")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20, height: 20)
+                        Text(feature)
+                            .font(.subheadline)
+                    }
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.blue.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.blue.opacity(0.2), lineWidth: 1)
+                    )
+            )
+            
+            VStack(spacing: 12) {
+                ForEach(plans.filter { $0.productID != nil }) { plan in
+                    SubscriptionPlanCard(
+                        plan: plan,
+                        product: plan.productID.flatMap { storeKitManager.product(for: $0) },
+                        isSelected: selectedPlanID == plan.productID,
+                        onSelect: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                selectedPlanID = plan.productID
+                            }
+                        }
+                    )
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(surfaceFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(surfaceStroke, lineWidth: 1)
+                )
+        )
+        .shadow(color: surfaceShadow, radius: 12, x: 0, y: 6)
+    }
+    
+    private var bottomActions: some View {
+        VStack(spacing: 16) {
+            if !storeKitManager.isProUser {
+                Button(action: handlePrimaryAction) {
+                    Text(primaryActionTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            Capsule()
+                                .fill(primaryActionEnabled
+                                      ? LinearGradient(colors: [Color.blue, Color.cyan], startPoint: .leading, endPoint: .trailing)
+                                      : LinearGradient(colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.25)], startPoint: .leading, endPoint: .trailing))
+                        )
+                        .foregroundStyle(primaryActionEnabled ? .white : .secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(!primaryActionEnabled)
+            } else {
+                Text("已解锁 Pro 会员")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        Capsule()
+                            .fill(Color.green.opacity(0.2))
+                    )
+                    .foregroundStyle(.green)
+            }
+            
+            VStack(spacing: 10) {
+                Button(action: restorePurchases) {
+                    SubscriptionActionRow(
+                        titleKey: "恢复购买",
+                        iconName: "arrow.clockwise.circle.fill"
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                Button(action: openUserService) {
+                    SubscriptionActionRow(
+                        titleKey: "用户服务",
+                        iconName: "person.fill.checkmark"
+                    )
+                }
+                .buttonStyle(.plain)
+                
+                Button(action: openPrivacyPolicy) {
+                    SubscriptionActionRow(
+                        titleKey: "隐私声明",
+                        iconName: "hand.raised.fill"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            
+            subscriptionInfoView
+        }
     }
     
     private var subscriptionInfoView: some View {
@@ -215,7 +338,7 @@ struct SubscriptionView: View {
             return String(localized: "当前免费版")
         }
         let price = priceText(for: selectedPlan)
-        return String(format: String(localized: "继续订阅 %@"), price)
+        return String(format: String(localized: "订阅 %@"), price)
     }
     
     private var primaryActionEnabled: Bool {
@@ -277,6 +400,7 @@ struct SubscriptionPlan: Identifiable {
     let fallbackPriceKey: String
     let productID: String?
     let isRecommended: Bool
+    let features: [String]
 }
 
 struct SubscriptionPlanCard: View {
@@ -312,10 +436,6 @@ struct SubscriptionPlanCard: View {
                                 .foregroundStyle(.blue)
                         }
                     }
-                    
-                    Text(LocalizedStringKey(plan.subtitleKey))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
                     
                     Text(String(format: String(localized: "周期：%@"), periodText))
                         .font(.caption)
