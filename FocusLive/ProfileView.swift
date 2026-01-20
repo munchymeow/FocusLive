@@ -125,7 +125,7 @@ struct ProfileView: View {
             HStack(spacing: 8) {
                 Text("你好")
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                Image("logo")
+                Image(isProUser ? "logoPro" : "logo")
                     .resizable()
                     .scaledToFit()
                     .frame(height: 22)
