@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "TODO_INFO新.jpg",
+      "filename" : "去做新年.jpg",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "TODO_INFO新dark.jpg",
+      "filename" : "去做新年dark.jpg",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,7 +25,7 @@
           "value" : "tinted"
         }
       ],
-      "filename" : "TODO_INFO新 1.jpg",
+      "filename" : "去做新年 1.jpg",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
