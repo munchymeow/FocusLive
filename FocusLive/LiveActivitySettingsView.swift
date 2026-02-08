@@ -16,15 +16,12 @@ struct LiveActivitySettingsView: View {
     private static let proStatusKey = "isProUser"
     private static let allowedGroupIDsKey = "liveActivityAllowedGroupIDs"
     private static let smartReminderKey = "smartReminderEnabled"
-    private let dailyMotivationKey = "dailyMotivationEnabled"
-    private let lastMotivationDateKey = "lastMotivationDate"
-    private let currentMotivationIndexKey = "currentMotivationIndex"
     
     @AppStorage(Self.displayCountKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var displayCount: Int = 4
     
     @AppStorage(Self.opacityKey, store: UserDefaults(suiteName: Self.appGroupID))
-    private var backgroundOpacity: Double = 0.9
+    private var backgroundOpacity: Double = 0.0
     
     @AppStorage(Self.proStatusKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var isProUser: Bool = false
@@ -84,6 +81,14 @@ struct LiveActivitySettingsView: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("液态玻璃透明度")
+                        Spacer()
+                        Text(String(format: String(localized: "背景透明度：%lld%%"), Int64(backgroundOpacity * 100)))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     Slider(value: $backgroundOpacity, in: 0.0...1.0, step: 0.1) {
                         Text("背景透明度")
                     } minimumValueLabel: {
@@ -91,8 +96,9 @@ struct LiveActivitySettingsView: View {
                     } maximumValueLabel: {
                         Text("100%")
                     }
-                    Text(String(format: "%.2f", backgroundOpacity))
-                        .font(.caption)
+
+                    Text("0% 为完全透明，100% 为最强液态玻璃效果。")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             } header: {
@@ -113,12 +119,8 @@ struct LiveActivitySettingsView: View {
             
             Section(header: Text("每日鼓励")) {
                 Toggle("每日鼓励", isOn: $dailyMotivationEnabled)
-                    .onChange(of: dailyMotivationEnabled) { _, newValue in
-                        if newValue {
-                            checkAndCreateMotivationActivity()
-                        } else {
-                            endMotivationActivity()
-                        }
+                    .onChange(of: dailyMotivationEnabled) { _, _ in
+                        syncLiveActivities()
                     }
                     
                     if dailyMotivationEnabled {
@@ -133,8 +135,7 @@ struct LiveActivitySettingsView: View {
         .onAppear {
             normalizeSettings()
             loadSelectedGroupsIfNeeded()
-            // 检查励志名言活动
-            checkAndCreateMotivationActivity()
+            syncLiveActivities()
         }
         .onChange(of: isProUser) { _, _ in
             normalizeSettings()
@@ -151,8 +152,6 @@ struct LiveActivitySettingsView: View {
         }
         .onChange(of: selectedGroupIDs) { _, _ in
             syncLiveActivities()
-            // 分组选择变化时，检查是否需要显示励志名言
-            checkAndCreateMotivationActivity()
         }
     }
     
@@ -255,82 +254,12 @@ struct LiveActivitySettingsView: View {
         defaults.set(Array(selectedGroupIDs), forKey: Self.allowedGroupIDsKey)
     }
     
-    /// 励志名言列表
-    private var motivationalQuotes: [String] {
-        guard let url = Bundle.main.url(forResource: "motivational_quotes", withExtension: "csv"),
-              let content = try? String(contentsOf: url, encoding: .utf8) else {
-            return []
-        }
-        
-        return content.components(separatedBy: .newlines)
-            .filter { !$0.isEmpty }
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-    }
-    
     /// 触发 Live Activity 刷新以应用最新设置
     /// - Returns: Void
     private func syncLiveActivities() {
         Task { @MainActor in
             ActivityManager.shared.syncActivities(groups: taskGroups)
         }
-    }
-    
-    /// 检查并创建励志名言活动
-    private func checkAndCreateMotivationActivity() {
-        guard dailyMotivationEnabled else { return }
-        
-        // 检查是否有活跃的分组活动
-        let hasActiveGroupActivities = ActivityManager.shared.hasActiveGroupActivities()
-        print("💡 检查励志名言: 每日鼓励=\(dailyMotivationEnabled), 有分组活动=\(hasActiveGroupActivities)")
-        
-        if hasActiveGroupActivities {
-            // 如果有分组活动，结束名言活动
-            ActivityManager.shared.endMotivationActivity()
-            print("💡 有分组活动，结束名言活动")
-            return
-        }
-        
-        // 检查是否需要更新名言（每天更换）
-        let defaults = UserDefaults(suiteName: Self.appGroupID)
-        let lastDate = defaults?.object(forKey: "lastMotivationDate") as? Date
-        let today = Calendar.current.startOfDay(for: Date())
-        
-        if lastDate == nil || !Calendar.current.isDate(lastDate!, inSameDayAs: today) {
-            // 需要更新名言
-            print("💡 需要更新名言，创建新活动")
-            createMotivationActivity()
-        } else {
-            print("💡 名言已是今天的，无需更新")
-        }
-    }
-    
-    /// 创建励志名言活动
-    private func createMotivationActivity() {
-        guard !motivationalQuotes.isEmpty else { return }
-        
-        let defaults = UserDefaults(suiteName: Self.appGroupID)
-        var currentIndex = defaults?.integer(forKey: "currentMotivationIndex") ?? 0
-        
-        // 获取当前名言
-        let quote = motivationalQuotes[currentIndex]
-        
-        // 更新索引（循环）
-        currentIndex = (currentIndex + 1) % motivationalQuotes.count
-        defaults?.set(currentIndex, forKey: "currentMotivationIndex")
-        defaults?.set(Date(), forKey: "lastMotivationDate")
-        
-        // 解析名言格式："名言"——作者
-        let components = quote.components(separatedBy: "——")
-        let quoteText = components.first?.trimmingCharacters(in: CharacterSet.whitespaces) ?? quote
-        let author = components.count > 1 ? components.last?.trimmingCharacters(in: CharacterSet.whitespaces) : nil
-        
-        // 创建名言活动
-        ActivityManager.shared.createMotivationActivity(quote: quoteText, author: author)
-    }
-    
-    /// 结束励志名言活动
-    private func endMotivationActivity() {
-        ActivityManager.shared.endMotivationActivity()
     }
 }
 

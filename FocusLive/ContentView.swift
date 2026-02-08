@@ -69,6 +69,8 @@ struct ContentView: View {
     @State private var pendingPrivateGroupCreation = false
     @State private var showSubscriptionSheet = false
     @State private var lastNonPrivateFilter: TaskFilter = .incomplete
+    @State private var showAddTypeDialog = false
+    @State private var pendingAddTaskType: TaskType = .todo
     
     @AppStorage("isProUser", store: UserDefaults(suiteName: appGroupID))
     private var isProUser: Bool = false
@@ -180,6 +182,15 @@ struct ContentView: View {
                     SubscriptionView()
                 }
             }
+            .confirmationDialog("添加组件", isPresented: $showAddTypeDialog, titleVisibility: .visible) {
+                Button("传统待办事项") {
+                    addNewGroup(taskType: .todo)
+                }
+                Button("提醒事项") {
+                    addNewGroup(taskType: .reminder)
+                }
+                Button("取消", role: .cancel) { }
+            }
         }
     }
     
@@ -204,7 +215,7 @@ struct ContentView: View {
             
             Spacer()
             
-            Button(action: addNewGroup) {
+            Button(action: { showAddTypeDialog = true }) {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
@@ -347,6 +358,13 @@ struct ContentView: View {
     private func isTaskPrivate(_ task: TaskItem, in group: TaskGroup) -> Bool {
         (group.isPrivate ?? false) || (task.isPrivate ?? false)
     }
+
+    /// 判断任务是否为提醒事项
+    /// - Parameter task: 任务
+    /// - Returns: 是否为提醒事项
+    private func isReminderTask(_ task: TaskItem) -> Bool {
+        task.taskType == .reminder
+    }
     
     /// 判断分组在当前筛选下是否需要展示
     /// - Parameter group: 任务分组
@@ -441,13 +459,13 @@ struct ContentView: View {
         
         switch activeFilter {
         case .incomplete:
-            return sortedTasks.filter { !isTaskPrivate($0, in: group) && !$0.isCompleted }
+            return sortedTasks.filter { !isTaskPrivate($0, in: group) && (isReminderTask($0) || !$0.isCompleted) }
         case .all:
             return sortedTasks.filter { !isTaskPrivate($0, in: group) }
         case .privateSpace:
             return isPrivacyUnlocked ? sortedTasks.filter { isTaskPrivate($0, in: group) } : []
         case .completed:
-            return sortedTasks.filter { !isTaskPrivate($0, in: group) && $0.isCompleted }
+            return sortedTasks.filter { !isTaskPrivate($0, in: group) && !isReminderTask($0) && $0.isCompleted }
         }
     }
     
@@ -467,78 +485,18 @@ struct ContentView: View {
                     isPrivacyUnlocked = true
                     if pendingPrivateGroupCreation {
                         pendingPrivateGroupCreation = false
-                        createGroup(isPrivate: true)
+                        createEntry(taskType: pendingAddTaskType, isPrivate: true)
                     }
                 } else {
                     privacyAlertMessage = String(localized: "验证失败，请稍后重试")
                     showPrivacyAlert = true
                     pendingPrivateGroupCreation = false
+                    pendingAddTaskType = .todo
                 }
             }
         }
     }
     
-    /// 检查并创建励志名言活动
-    private func checkAndCreateMotivationActivity() {
-        let defaults = UserDefaults(suiteName: appGroupID)
-        let isEnabled = defaults?.bool(forKey: "dailyMotivationEnabled") ?? true
-        
-        guard isEnabled else {
-            ActivityManager.shared.endMotivationActivity()
-            return
-        }
-        
-        // 检查是否有活跃的分组活动
-        let hasActiveGroupActivities = ActivityManager.shared.hasActiveGroupActivities()
-        if hasActiveGroupActivities {
-            // 如果有分组活动，结束名言活动
-            ActivityManager.shared.endMotivationActivity()
-            return
-        }
-        
-        // 检查是否需要更新名言（每天更换）
-        let lastDate = defaults?.object(forKey: "lastMotivationDate") as? Date
-        let today = Calendar.current.startOfDay(for: Date())
-        
-        if lastDate == nil || !Calendar.current.isDate(lastDate!, inSameDayAs: today) {
-            // 需要更新名言
-            createMotivationActivity()
-        }
-    }
-    
-    /// 创建励志名言活动
-    private func createMotivationActivity() {
-        guard let url = Bundle.main.url(forResource: "motivational_quotes", withExtension: "csv"),
-              let content = try? String(contentsOf: url, encoding: .utf8) else {
-            return
-        }
-        
-        let quotes = content.components(separatedBy: .newlines)
-            .filter { !$0.isEmpty }
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-        
-        guard !quotes.isEmpty else { return }
-        
-        let defaults = UserDefaults(suiteName: appGroupID)
-        var currentIndex = defaults?.integer(forKey: "currentMotivationIndex") ?? 0
-        
-        // 获取当前名言
-        let quote = quotes[currentIndex]
-        
-        // 更新索引（循环）
-        currentIndex = (currentIndex + 1) % quotes.count
-        defaults?.set(currentIndex, forKey: "currentMotivationIndex")
-        defaults?.set(Date(), forKey: "lastMotivationDate")
-        
-        // 解析名言格式："名言"——作者
-        let components = quote.components(separatedBy: "——")
-        let quoteText = components.first?.trimmingCharacters(in: .whitespaces) ?? quote
-        let author = components.count > 1 ? components.last?.trimmingCharacters(in: .whitespaces) : nil
-        
-        // 创建名言活动
-        ActivityManager.shared.createMotivationActivity(quote: quoteText, author: author)
-    }
-
     // MARK: - 空状态视图
     private var emptyStateView: some View {
         VStack(spacing: 20) {
@@ -581,8 +539,9 @@ struct ContentView: View {
     
     // MARK: - 统计卡片
     private var statsCard: some View {
-        let totalTasks = visibleTasks.count
-        let completedTasks = visibleTasks.filter { $0.isCompleted }.count
+        let visibleTodoTasks = visibleTasks.filter { !isReminderTask($0) }
+        let totalTasks = visibleTodoTasks.count
+        let completedTasks = visibleTodoTasks.filter { $0.isCompleted }.count
         let progress = totalTasks > 0 ? Double(completedTasks) / Double(totalTasks) : 0
         let groupCount = filteredGroupEntries.count
         
@@ -644,9 +603,6 @@ struct ContentView: View {
     private func syncActivitiesWithGroups() {
         Task { @MainActor in
             ActivityManager.shared.syncActivities(groups: taskGroups)
-            
-            // 检查励志名言活动
-            checkAndCreateMotivationActivity()
         }
     }
     
@@ -669,6 +625,9 @@ struct ContentView: View {
             // 查找对应的分组和任务
             if let group = taskGroups.first(where: { $0.id.uuidString == groupIDStr }),
                let task = group.tasks.first(where: { $0.id.uuidString == taskIDStr }) {
+                if task.taskType == .reminder {
+                    continue
+                }
                 // 更新任务状态
                 if task.isCompleted != isCompleted {
                     task.isCompleted = isCompleted
@@ -685,22 +644,36 @@ struct ContentView: View {
         print("📥 待处理变更已全部同步")
     }
     
-    /// 添加新分组（根据当前筛选决定是否创建隐私分组）
+    /// 添加新组件（传统待办分组 / 提醒事项分组）
     /// - Returns: Void
-    private func addNewGroup() {
+    private func addNewGroup(taskType: TaskType) {
         if activeFilter == .privateSpace {
             if !isProUser {
                 showSubscriptionSheet = true
                 return
             }
             if isPrivacyUnlocked {
-                createGroup(isPrivate: true)
+                createEntry(taskType: taskType, isPrivate: true)
             } else {
                 pendingPrivateGroupCreation = true
+                pendingAddTaskType = taskType
                 requestPrivacyUnlockIfNeeded()
             }
         } else {
-            createGroup(isPrivate: false)
+            createEntry(taskType: taskType, isPrivate: false)
+        }
+    }
+
+    /// 根据任务类型创建对应入口
+    /// - Parameters:
+    ///   - taskType: 任务类型
+    ///   - isPrivate: 是否为隐私分组
+    private func createEntry(taskType: TaskType, isPrivate: Bool) {
+        switch taskType {
+        case .todo:
+            createGroup(isPrivate: isPrivate)
+        case .reminder:
+            createReminderGroup(isPrivate: isPrivate)
         }
     }
     
@@ -718,6 +691,30 @@ struct ContentView: View {
             tasks: []
         )
         modelContext.insert(newGroup)
+        try? modelContext.save()
+    }
+
+    /// 创建提醒事项分组，并自动创建一条提醒事项
+    /// - Parameter isPrivate: 是否为隐私分组
+    private func createReminderGroup(isPrivate: Bool) {
+        let maxOrder = taskGroups.compactMap { $0.sortOrder }.max() ?? -1
+        let title = String(format: String(localized: "新提醒分组 %lld"), Int64(taskGroups.count + 1))
+        let reminderGroup = TaskGroup(
+            title: title,
+            iconName: "🔔",
+            isPrivate: isPrivate,
+            sortOrder: maxOrder + 1,
+            tasks: []
+        )
+        let reminderTask = TaskItem(
+            title: String(localized: "新提醒"),
+            isCompleted: false,
+            isPrivate: isPrivate,
+            taskType: .reminder,
+            sortOrder: 0
+        )
+        reminderGroup.tasks.append(reminderTask)
+        modelContext.insert(reminderGroup)
         try? modelContext.save()
     }
     
@@ -854,6 +851,16 @@ struct TaskGroupCard: View {
     private var sortedTasks: [TaskItem] {
         displayTasks
     }
+
+    /// 普通待办列表（用于进度统计）
+    private var todoTasks: [TaskItem] {
+        displayTasks.filter { $0.taskType != .reminder }
+    }
+
+    /// 提醒事项数量（用于展示）
+    private var reminderCount: Int {
+        displayTasks.filter { $0.taskType == .reminder }.count
+    }
     
     /// 计算进度（0.0 ~ 1.0）
     private var progress: Double {
@@ -863,17 +870,17 @@ struct TaskGroupCard: View {
     
     /// 已完成任务数量（当前展示）
     private var completedCount: Int {
-        displayTasks.filter { $0.isCompleted }.count
+        todoTasks.filter { $0.isCompleted }.count
     }
     
     /// 总任务数量（当前展示）
     private var totalCount: Int {
-        displayTasks.count
+        todoTasks.count
     }
     
     /// 未完成任务数量（当前展示）
     private var incompleteCount: Int {
-        displayTasks.filter { !$0.isCompleted }.count
+        todoTasks.filter { !$0.isCompleted }.count
     }
     
     /// 卡片背景色
@@ -916,9 +923,15 @@ struct TaskGroupCard: View {
                             .font(.system(size: 18, weight: .semibold))
                             .lineLimit(1)
                         
-                        Text(String(format: String(localized: "%lld 项待办"), Int64(incompleteCount)))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if totalCount > 0 {
+                            Text(String(format: String(localized: "%lld 项待办"), Int64(incompleteCount)))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(String(format: String(localized: "提醒 %lld"), Int64(reminderCount)))
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
                     }
                     .onTapGesture {
                         editedTitle = group.title
@@ -934,15 +947,25 @@ struct TaskGroupCard: View {
                         Text("✅")
                             .font(.system(size: 14))
                     }
-                    Text("\(completedCount)/\(totalCount)")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(progress == 1 ? .green : .blue)
+                    if totalCount > 0 {
+                        Text("\(completedCount)/\(totalCount)")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(progress == 1 ? .green : .blue)
+                    } else {
+                        Text("🔔\(reminderCount)")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.orange)
+                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
                     Capsule()
-                        .fill(progress == 1 ? Color.green.opacity(0.15) : Color.blue.opacity(0.15))
+                        .fill(
+                            totalCount > 0
+                                ? (progress == 1 ? Color.green.opacity(0.15) : Color.blue.opacity(0.15))
+                                : Color.orange.opacity(0.15)
+                        )
                 )
                 
                 // 编辑完成按钮
@@ -1023,7 +1046,7 @@ struct TaskGroupCard: View {
                     HStack(spacing: 8) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 18))
-                        Text("添加任务")
+                        Text(defaultTaskTypeForAdd == .reminder ? "添加提醒" : "添加任务")
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
@@ -1125,15 +1148,24 @@ struct TaskGroupCard: View {
     /// - Returns: Void
     private func addTask(to group: TaskGroup) {
         let maxOrder = group.tasks.compactMap { $0.sortOrder }.max() ?? -1
+        let taskType = defaultTaskTypeForAdd
         let newTask = TaskItem(
-            title: String(localized: "新任务"),
+            title: String(localized: taskType == .reminder ? "新提醒" : "新任务"),
             isCompleted: false,
             isPrivate: group.isPrivate ?? false,
+            taskType: taskType,
             sortOrder: maxOrder + 1
         )
         group.tasks.append(newTask)
         try? modelContext.save()
         updateLiveActivity()
+    }
+
+    private var defaultTaskTypeForAdd: TaskType {
+        if group.tasks.contains(where: { $0.taskType == .reminder }) && !group.tasks.contains(where: { $0.taskType != .reminder }) {
+            return .reminder
+        }
+        return .todo
     }
     
     private func moveTaskUp(_ task: TaskItem) {
@@ -1244,34 +1276,41 @@ struct TaskRow: View {
     
     var body: some View {
         HStack(spacing: 14) {
-            // 完成按钮
-            Button(action: toggleTask) {
-                ZStack {
-                    Circle()
-                        .stroke(
-                            task.isCompleted ? Color.green : Color.gray.opacity(0.3),
-                            lineWidth: 2.5
-                        )
-                        .frame(width: 26, height: 26)
-                    
-                    if task.isCompleted {
+            if task.taskType == .reminder {
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 26, height: 26)
+            } else {
+                // 完成按钮
+                Button(action: toggleTask) {
+                    ZStack {
                         Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [.green, .green.opacity(0.8)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
+                            .stroke(
+                                task.isCompleted ? Color.green : Color.gray.opacity(0.3),
+                                lineWidth: 2.5
                             )
                             .frame(width: 26, height: 26)
                         
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
+                        if task.isCompleted {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [.green, .green.opacity(0.8)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 26, height: 26)
+                            
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
                     }
                 }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             
             // 任务标题（可编辑）
             if isEditing {
@@ -1295,8 +1334,8 @@ struct TaskRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(task.title)
                         .font(.system(size: 16))
-                        .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                        .strikethrough(task.isCompleted, color: .secondary)
+                        .foregroundStyle((task.isCompleted && task.taskType != .reminder) ? .secondary : .primary)
+                        .strikethrough(task.isCompleted && task.taskType != .reminder, color: .secondary)
                         .lineLimit(2)
                     
                     // 显示截止日期
@@ -1350,7 +1389,11 @@ struct TaskRow: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(task.isCompleted ? Color.green.opacity(0.05) : Color.gray.opacity(0.04))
+                .fill(
+                    task.taskType == .reminder
+                        ? Color.orange.opacity(0.08)
+                        : (task.isCompleted ? Color.green.opacity(0.05) : Color.gray.opacity(0.04))
+                )
         )
         .contentShape(Rectangle())
         .contextMenu {
@@ -1414,6 +1457,7 @@ struct TaskRow: View {
     }
     
     private func toggleTask() {
+        guard task.taskType != .reminder else { return }
         withAnimation(.spring(duration: 0.2)) {
             task.isCompleted.toggle()
         }

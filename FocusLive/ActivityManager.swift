@@ -15,6 +15,10 @@ private let appGroupID = "group.com.QingTeng.FocusLive"
 private let allowedGroupIDsKey = "liveActivityAllowedGroupIDs"
 private let proStatusKey = "isProUser"
 private let smartReminderKey = "smartReminderEnabled"
+private let dailyMotivationEnabledKey = "dailyMotivationEnabled"
+private let lastMotivationDateKey = "lastMotivationDate"
+private let currentMotivationQuoteKey = "currentMotivationQuote"
+private let currentMotivationAuthorKey = "currentMotivationAuthor"
 
 /// 待同步的任务变更记录
 struct PendingTaskChange: Codable {
@@ -97,6 +101,11 @@ final class ActivityManager {
         // 无效情况：分组被删除、分组为空、分组全部完成
         for activity in runningActivities {
             let groupID = activity.attributes.groupID
+
+            // 跳过特殊类型 Activity（每日鼓励 / 智能提醒）
+            if isSpecialActivity(groupID: groupID) {
+                continue
+            }
             
             // 如果该 Activity 对应的分组不在有效分组列表中
             if !validGroupIDs.contains(groupID) {
@@ -125,7 +134,7 @@ final class ActivityManager {
             checkAndCreateSmartReminders(groups: groups)
         }
         
-        // 检查励志名言活动（如果没有分组活动）
+        // 根据每日鼓励开关与分组选择同步励志名言活动
         checkAndCreateMotivationActivityIfNeeded()
     }
 
@@ -247,7 +256,8 @@ final class ActivityManager {
                     title: countdownText,
                     isCompleted: false
                 )
-            ]
+            ],
+            renderVersion: Date().timeIntervalSince1970
         )
         
         do {
@@ -278,7 +288,8 @@ final class ActivityManager {
         let contentState = FocusAttributes.ContentState(
             groupTitle: group.title,
             groupIcon: group.iconName,
-            tasks: publicTasks.map { TaskItemSnapshot(from: $0) }
+            tasks: publicTasks.map { TaskItemSnapshot(from: $0) },
+            renderVersion: Date().timeIntervalSince1970
         )
         
         print("═══════════════════════════════════════════")
@@ -320,7 +331,8 @@ final class ActivityManager {
         let newState = FocusAttributes.ContentState(
             groupTitle: group.title,
             groupIcon: group.iconName,
-            tasks: publicTasks.map { TaskItemSnapshot(from: $0) }
+            tasks: publicTasks.map { TaskItemSnapshot(from: $0) },
+            renderVersion: Date().timeIntervalSince1970
         )
         
         Task {
@@ -349,13 +361,15 @@ final class ActivityManager {
                 id: updatedTasks[index].id,
                 title: updatedTasks[index].title,
                 isCompleted: isCompleted,
+                taskType: updatedTasks[index].taskType,
                 dueDate: updatedTasks[index].dueDate
             )
             
             let newState = FocusAttributes.ContentState(
                 groupTitle: activity.content.state.groupTitle,
                 groupIcon: activity.content.state.groupIcon,
-                tasks: updatedTasks
+                tasks: updatedTasks,
+                renderVersion: Date().timeIntervalSince1970
             )
             
             Task {
@@ -432,7 +446,7 @@ final class ActivityManager {
     /// - Returns: 是否有分组活动正在运行
     func hasActiveGroupActivities() -> Bool {
         let runningActivities = Activity<FocusAttributes>.activities
-        return runningActivities.contains { !$0.attributes.groupID.hasPrefix("motivation_") }
+        return runningActivities.contains { !isSpecialActivity(groupID: $0.attributes.groupID) }
     }
     
     /// 创建励志名言活动
@@ -457,11 +471,12 @@ final class ActivityManager {
                     title: fullText,
                     isCompleted: false
                 )
-            ]
+            ],
+            renderVersion: Date().timeIntervalSince1970
         )
         
         do {
-            let activity = try Activity.request(
+            _ = try Activity.request(
                 attributes: attributes,
                 content: .init(state: contentState, staleDate: nil),
                 pushType: nil
@@ -506,8 +521,7 @@ final class ActivityManager {
         var hasChanges = false
         
         for changeDict in pendingChangesData {
-            guard let groupID = changeDict["groupID"] as? String,
-                  let taskID = changeDict["taskID"] as? String,
+            guard let taskID = changeDict["taskID"] as? String,
                   let isCompleted = changeDict["isCompleted"] as? Bool else {
                 continue
             }
@@ -565,62 +579,105 @@ final class ActivityManager {
 
     /// 检查并创建励志名言活动（如果需要）
     private func checkAndCreateMotivationActivityIfNeeded() {
-        let defaults = UserDefaults(suiteName: appGroupID)
-        let isEnabled = defaults?.bool(forKey: "dailyMotivationEnabled") ?? true
+        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
         
-        guard isEnabled else {
+        let isEnabled = defaults.object(forKey: dailyMotivationEnabledKey) as? Bool ?? true
+        let storedSelection = defaults.array(forKey: allowedGroupIDsKey) as? [String]
+        let shouldShowMotivation = isEnabled && (storedSelection?.isEmpty == true)
+        
+        guard shouldShowMotivation else {
             endMotivationActivity()
             return
         }
         
-        // 检查是否有活跃的分组活动
-        let hasActiveGroupActivities = hasActiveGroupActivities()
-        if hasActiveGroupActivities {
-            // 如果有分组活动，结束名言活动
-            endMotivationActivity()
-            return
+        let motivationActivities = Activity<FocusAttributes>.activities.filter {
+            $0.attributes.groupID.hasPrefix("motivation_")
         }
         
         // 检查是否需要更新名言（每天更换）
-        let lastDate = defaults?.object(forKey: "lastMotivationDate") as? Date
+        let lastDate = defaults.object(forKey: lastMotivationDateKey) as? Date
         let today = Calendar.current.startOfDay(for: Date())
+        let isToday = lastDate.map { Calendar.current.isDate($0, inSameDayAs: today) } ?? false
         
-        if lastDate == nil || !Calendar.current.isDate(lastDate!, inSameDayAs: today) {
-            // 需要更新名言
-            createMotivationActivityFromCSV()
+        // 同一天内，如果没有正在运行的每日鼓励卡片，按已存内容恢复
+        if isToday {
+            guard motivationActivities.isEmpty else { return }
+            
+            let storedQuote = defaults.string(forKey: currentMotivationQuoteKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !storedQuote.isEmpty {
+                let storedAuthor = defaults.string(forKey: currentMotivationAuthorKey)
+                createMotivationActivity(quote: storedQuote, author: storedAuthor)
+                return
+            }
+            
+            createRandomMotivationActivity(defaults: defaults, for: today)
+            return
         }
+        
+        // 新的一天：先结束旧卡片，再随机生成当天内容
+        if !motivationActivities.isEmpty {
+            endMotivationActivity()
+        }
+        createRandomMotivationActivity(defaults: defaults, for: today)
     }
     
-    /// 从CSV文件创建励志名言活动
-    private func createMotivationActivityFromCSV() {
+    /// 随机选择一句名言并创建活动，同时持久化当天内容
+    private func createRandomMotivationActivity(defaults: UserDefaults, for dayStart: Date) {
+        guard let selected = randomMotivationQuoteFromCSV() else { return }
+        
+        defaults.set(selected.quote, forKey: currentMotivationQuoteKey)
+        if let author = selected.author, !author.isEmpty {
+            defaults.set(author, forKey: currentMotivationAuthorKey)
+        } else {
+            defaults.removeObject(forKey: currentMotivationAuthorKey)
+        }
+        defaults.set(dayStart, forKey: lastMotivationDateKey)
+        
+        createMotivationActivity(quote: selected.quote, author: selected.author)
+    }
+    
+    /// 从 CSV 中随机获取一句名言
+    private func randomMotivationQuoteFromCSV() -> (quote: String, author: String?)? {
         guard let url = Bundle.main.url(forResource: "motivational_quotes", withExtension: "csv"),
               let content = try? String(contentsOf: url, encoding: .utf8) else {
-            return
+            return nil
         }
         
         let quotes = content.components(separatedBy: .newlines)
             .filter { !$0.isEmpty }
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         
-        guard !quotes.isEmpty else { return }
+        guard let line = quotes.randomElement() else { return nil }
+        return parseMotivationLine(line)
+    }
+    
+    /// 解析 CSV 行："名言"——作者
+    private func parseMotivationLine(_ line: String) -> (quote: String, author: String?) {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let range = trimmed.range(of: "——", options: .backwards) else {
+            return (cleanedQuote(trimmed), nil)
+        }
         
-        let defaults = UserDefaults(suiteName: appGroupID)
-        var currentIndex = defaults?.integer(forKey: "currentMotivationIndex") ?? 0
+        let rawQuote = String(trimmed[..<range.lowerBound])
+        let rawAuthor = String(trimmed[range.upperBound...])
+        let quote = cleanedQuote(rawQuote)
+        let author = rawAuthor.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // 获取当前名言
-        let quote = quotes[currentIndex]
-        
-        // 更新索引（循环）
-        currentIndex = (currentIndex + 1) % quotes.count
-        defaults?.set(currentIndex, forKey: "currentMotivationIndex")
-        defaults?.set(Date(), forKey: "lastMotivationDate")
-        
-        // 解析名言格式："名言"——作者
-        let components = quote.components(separatedBy: "——")
-        let quoteText = components.first?.trimmingCharacters(in: CharacterSet.whitespaces) ?? quote
-        let author = components.count > 1 ? components.last?.trimmingCharacters(in: CharacterSet.whitespaces) : nil
-        
-        // 创建名言活动
-        createMotivationActivity(quote: quoteText, author: author)
+        return (quote, author.isEmpty ? nil : author)
+    }
+    
+    /// 清洗名言文本（去掉包裹引号）
+    private func cleanedQuote(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("\""), text.hasSuffix("\""), text.count >= 2 {
+            text.removeFirst()
+            text.removeLast()
+        }
+        return text.trimmingCharacters(in: CharacterSet(charactersIn: "“”\""))
+    }
+    
+    /// 是否为特殊 Activity（不是普通分组 Activity）
+    private func isSpecialActivity(groupID: String) -> Bool {
+        groupID.hasPrefix("motivation_") || groupID.hasPrefix("smart_reminder_")
     }
 }

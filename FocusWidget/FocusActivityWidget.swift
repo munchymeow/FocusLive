@@ -9,6 +9,7 @@ import SwiftUI
 import ActivityKit
 import WidgetKit
 import AppIntents
+import UIKit
 
 private let appGroupID = "group.com.QingTeng.FocusLive"
 private let liveActivityDisplayCountKey = "liveActivityMaxCount"
@@ -35,11 +36,24 @@ struct FocusActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text("\(context.state.completedCount)/\(context.state.totalCount)")
-                        .font(.headline.monospacedDigit())
+                    if context.attributes.groupID.hasPrefix("motivation_") {
+                        Text("💡")
+                            .font(.headline)
+                    } else if context.state.totalCount > 0 {
+                        Text("\(context.state.completedCount)/\(context.state.totalCount)")
+                            .font(.headline.monospacedDigit())
+                    } else {
+                        Text("🔔\(context.state.reminderTasks.count)")
+                            .font(.headline.monospacedDigit())
+                    }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    if let firstTask = context.state.incompleteTasks.first {
+                    if context.attributes.groupID.hasPrefix("motivation_"),
+                       let quoteTask = context.state.tasks.first {
+                        Text(quoteTask.title)
+                            .font(.subheadline)
+                            .lineLimit(2)
+                    } else if let firstTask = context.state.todoIncompleteTasks.first {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("下一个: \(firstTask.title)")
                                 .font(.subheadline)
@@ -61,6 +75,15 @@ struct FocusActivityWidget: Widget {
                             }
                             .buttonStyle(.plain)
                         }
+                    } else if let firstReminder = context.state.reminderTasks.first {
+                        HStack(spacing: 8) {
+                            Image(systemName: "bell.fill")
+                                .foregroundStyle(.orange)
+                            Text(firstReminder.title)
+                                .font(.subheadline)
+                                .lineLimit(1)
+                            Spacer()
+                        }
                     } else {
                         Text("✓ 全部完成！")
                             .font(.headline)
@@ -72,24 +95,41 @@ struct FocusActivityWidget: Widget {
                 Text(context.state.groupIcon)
                     .font(.system(size: 14))
             } compactTrailing: {
-                // 右侧紧凑视图：显示进度
-                Text("\(context.state.completedCount)/\(context.state.totalCount)")
-                    .font(.caption.monospacedDigit())
+                if context.attributes.groupID.hasPrefix("motivation_") {
+                    Text("💡")
+                        .font(.caption)
+                } else if context.state.totalCount > 0 {
+                    Text("\(context.state.completedCount)/\(context.state.totalCount)")
+                        .font(.caption.monospacedDigit())
+                } else {
+                    Text("🔔\(context.state.reminderTasks.count)")
+                        .font(.caption.monospacedDigit())
+                }
             } minimal: {
                 // 最小化视图：显示剩余任务数（点击展开灵动岛）
                 // 注意：minimal 视图不支持 Button 交互，点击会展开灵动岛
-                ZStack {
-                    Circle()
-                        .fill(context.state.remainingCount > 0 ? Color.blue : Color.green)
-                    
-                    if context.state.remainingCount > 0 {
-                        Text("\(context.state.remainingCount)")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                    } else {
-                        Image(systemName: "checkmark")
+                if context.attributes.groupID.hasPrefix("motivation_") {
+                    ZStack {
+                        Circle()
+                            .fill(Color.orange)
+                        Image(systemName: "lightbulb.fill")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.white)
+                    }
+                } else {
+                    ZStack {
+                        Circle()
+                            .fill(context.state.remainingCount > 0 ? Color.blue : Color.green)
+                        
+                        if context.state.remainingCount > 0 {
+                            Text("\(context.state.remainingCount)")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                        } else {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
                     }
                 }
             }
@@ -101,6 +141,56 @@ struct FocusActivityWidget: Widget {
 struct LockScreenLiveActivityView: View {
     let context: ActivityViewContext<FocusAttributes>
     
+    /// 是否为每日鼓励卡片
+    private var isMotivationActivity: Bool {
+        context.attributes.groupID.hasPrefix("motivation_")
+    }
+    
+    /// 每日鼓励正文
+    private var motivationText: String {
+        context.state.tasks.first?.title ?? "愿你今天也保持专注。"
+    }
+    
+    /// 拆分每日鼓励内容（正文 / 作者）
+    private var motivationParts: (quote: String, author: String?) {
+        let raw = motivationText.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if let range = raw.range(of: "\n——", options: .backwards) {
+            let quote = String(raw[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let author = String(raw[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            return (quote.isEmpty ? raw : quote, author.isEmpty ? nil : author)
+        }
+        
+        if let range = raw.range(of: "——", options: .backwards) {
+            let quote = String(raw[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let author = String(raw[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            return (quote.isEmpty ? raw : quote, author.isEmpty ? nil : author)
+        }
+        
+        return (raw, nil)
+    }
+    
+    private var motivationQuoteText: String {
+        motivationParts.quote
+    }
+    
+    private var motivationAuthorText: String? {
+        motivationParts.author
+    }
+    
+    /// 每日鼓励装饰色
+    private var motivationAccentGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.cyan.opacity(isDarkAppearance ? 0.85 : 0.72),
+                Color.blue.opacity(isDarkAppearance ? 0.78 : 0.64),
+                Color.mint.opacity(isDarkAppearance ? 0.72 : 0.58)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
     /// 计算进度值（防止除零错误）
     private var progressValue: Double {
         let total = context.state.totalCount
@@ -110,7 +200,7 @@ struct LockScreenLiveActivityView: View {
     
     /// 是否全部完成
     private var isAllCompleted: Bool {
-        context.state.remainingCount == 0 && context.state.totalCount > 0
+        context.state.todoIncompleteTasks.isEmpty && context.state.totalCount > 0
     }
     
     /// 显示的任务数量（最多5项）
@@ -135,13 +225,67 @@ struct LockScreenLiveActivityView: View {
         // 超过4个任务时自动启用紧凑模式
         return userSetting || taskCount > 4
     }
+
+    private var headerStatusText: String {
+        if isMotivationActivity {
+            return "每日一句"
+        }
+        if context.state.totalCount > 0 {
+            return isAllCompleted ? "✓" : "\(context.state.completedCount)/\(context.state.totalCount)"
+        }
+        return "🔔\(context.state.reminderTasks.count)"
+    }
     
-    /// 用户设置的背景透明度
+    /// 用户设置的背景透明度（默认完全透明）
     private var backgroundOpacity: Double {
         let storedValue = UserDefaults(suiteName: appGroupID)?
             .object(forKey: liveActivityOpacityKey) as? NSNumber
-        let value = storedValue?.doubleValue ?? 0.9
+        let value = storedValue?.doubleValue ?? 0.0
         return min(max(value, 0.0), 1.0)
+    }
+
+    /// 当前是否为深色外观（读取系统外观设置）
+    private var isDarkAppearance: Bool {
+        if let interfaceStyle = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") {
+            return interfaceStyle == "Dark"
+        }
+        return false
+    }
+
+    /// 锁屏卡片基础色：浅色白、深色黑
+    private var baseCardColor: Color {
+        isDarkAppearance ? Color.black : Color.white
+    }
+
+    /// 锁屏卡片玻璃背景（0 时完全透明，100 时接近基准色）
+    @ViewBuilder
+    private var glassBackground: some View {
+        if backgroundOpacity >= 1.0 {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(baseCardColor)
+        } else if backgroundOpacity > 0.001 {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(baseCardColor.opacity(backgroundOpacity))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .opacity((1.0 - backgroundOpacity) * 0.55)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(isDarkAppearance ? 0.06 * backgroundOpacity : 0.12 * backgroundOpacity))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(
+                            (isDarkAppearance ? Color.white : Color.black)
+                                .opacity(isDarkAppearance ? 0.22 * backgroundOpacity : 0.10 * backgroundOpacity),
+                            lineWidth: 1
+                        )
+                )
+        } else {
+            Color.clear
+        }
     }
 
     /// 当前会员状态
@@ -239,6 +383,9 @@ struct LockScreenLiveActivityView: View {
     }
     
     var body: some View {
+        if isMotivationActivity {
+            motivationCardBody
+        } else {
         // 整体容器 - 始终使用最大尺寸
         VStack(alignment: .leading, spacing: displayTaskCount <= 3 ? 14 : (displayTaskCount <= 6 ? 10 : 8)) {
             // 头部：左边emoji+标题，右边进度
@@ -257,7 +404,7 @@ struct LockScreenLiveActivityView: View {
                 Spacer()
                 
                 // 右上：进度数字
-                Text(isAllCompleted ? "✓" : "\(context.state.completedCount)/\(context.state.totalCount)")
+                Text(headerStatusText)
                     .font(headerFont)
                     .fontWeight(.medium)
                     .foregroundStyle(isAllCompleted ? .green : .secondary)
@@ -305,7 +452,7 @@ struct LockScreenLiveActivityView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: taskIconSize))
                         .foregroundStyle(.green)
-                    Text(context.state.incompleteTasks.isEmpty && context.state.totalCount > 0 ? "全部完成！" : "暂无任务")
+                    Text(context.state.totalCount > 0 ? "全部完成！" : "暂无任务")
                         .font(taskFont)
                         .fontWeight(.medium)
                         .foregroundStyle(.green)
@@ -320,7 +467,116 @@ struct LockScreenLiveActivityView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
-        .activityBackgroundTint(Color(uiColor: .systemBackground).opacity(backgroundOpacity))
+        .background(glassBackground)
+        .activityBackgroundTint(.clear)
+        .activitySystemActionForegroundColor(Color.primary)
+        }
+    }
+    
+    /// 每日鼓励专用卡片（纯展示，不交互）
+    private var motivationCardBody: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .center) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(motivationAccentGradient)
+                            .frame(width: 28, height: 28)
+                        Image(systemName: "quote.opening")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    
+                    Text(context.state.groupTitle)
+                        .font(.system(size: 16, weight: .semibold))
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                }
+                
+                Spacer()
+                
+                Text(headerStatusText)
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(.thinMaterial)
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .stroke(Color.white.opacity(isDarkAppearance ? 0.20 : 0.28), lineWidth: 0.7)
+                    )
+            }
+            
+            HStack(alignment: .top, spacing: 10) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(motivationAccentGradient)
+                    .frame(width: 3)
+                
+                Text("“\(motivationQuoteText)”")
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            if let author = motivationAuthorText {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(author)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.primary.opacity(isDarkAppearance ? 0.12 : 0.08))
+                )
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            
+            HStack(spacing: 6) {
+                Image(systemName: "leaf.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("慢一点，也在前进")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(14)
+        .background(glassBackground)
+        .overlay(alignment: .topTrailing) {
+            Circle()
+                .stroke(motivationAccentGradient, lineWidth: 1)
+                .frame(width: 78, height: 78)
+                .opacity(0.55)
+                .offset(x: 22, y: -30)
+        }
+        .overlay(alignment: .topTrailing) {
+            Circle()
+                .fill(motivationAccentGradient.opacity(0.18))
+                .frame(width: 58, height: 58)
+                .offset(x: 12, y: -22)
+        }
+        .overlay(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                .fill(motivationAccentGradient.opacity(0.45))
+                .frame(height: 1)
+                .padding(.horizontal, 4)
+                .padding(.bottom, 2)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .activityBackgroundTint(.clear)
         .activitySystemActionForegroundColor(Color.primary)
     }
 }
@@ -335,21 +591,17 @@ struct TaskRowView: View {
     var body: some View {
         // 调试：打印参数
         let _ = print("🔘 [TaskRowView] 渲染: groupID=\(groupID), taskID=\(task.id), title=\(task.title)")
-        
-        // 使用 Button + LiveActivityIntent 实现不打开 App 的交互
-        Button(intent: ToggleTaskIntent(groupID: groupID, taskID: task.id)) {
+
+        if task.taskType == .reminder {
             HStack(spacing: 10) {
-                // 圆圈图标
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                Image(systemName: "bell.fill")
                     .font(.system(size: iconSize, weight: .medium))
-                    .foregroundStyle(task.isCompleted ? .green : .gray)
+                    .foregroundStyle(.orange)
                 
-                // 任务标题
                 Text(task.title)
                     .font(font)
                     .fontWeight(.medium)
-                    .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                    .strikethrough(task.isCompleted, color: .secondary)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                 
                 Spacer(minLength: 0)
@@ -363,8 +615,37 @@ struct TaskRowView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
+        } else {
+            // 使用 Button + LiveActivityIntent 实现不打开 App 的交互
+            Button(intent: ToggleTaskIntent(groupID: groupID, taskID: task.id)) {
+                HStack(spacing: 10) {
+                    // 圆圈图标
+                    Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: iconSize, weight: .medium))
+                        .foregroundStyle(task.isCompleted ? .green : .gray)
+                    
+                    // 任务标题
+                    Text(task.title)
+                        .font(font)
+                        .fontWeight(.medium)
+                        .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                        .strikethrough(task.isCompleted, color: .secondary)
+                        .lineLimit(1)
+                    
+                    Spacer(minLength: 0)
+                    
+                    // 日期显示在右边
+                    if let dateStr = task.formattedDueDate {
+                        Text(dateStr)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 }
 

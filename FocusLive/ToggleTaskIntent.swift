@@ -83,6 +83,11 @@ struct ToggleTaskIntent: LiveActivityIntent {
         }
         
         let currentTask = updatedTasks[index]
+        if currentTask.taskType == .reminder {
+            print("   ℹ️ 提醒事项不支持完成状态切换，忽略操作")
+            print("═══════════════════════════════════════════")
+            return .result()
+        }
         let newCompletedStatus = !currentTask.isCompleted
         
         print("   🔄 准备更新任务:")
@@ -95,6 +100,7 @@ struct ToggleTaskIntent: LiveActivityIntent {
             id: currentTask.id,
             title: currentTask.title,
             isCompleted: newCompletedStatus,
+            taskType: currentTask.taskType,
             dueDate: currentTask.dueDate
         )
         
@@ -104,7 +110,8 @@ struct ToggleTaskIntent: LiveActivityIntent {
         let newState = FocusAttributes.ContentState(
             groupTitle: activity.content.state.groupTitle,
             groupIcon: activity.content.state.groupIcon,
-            tasks: updatedTasks
+            tasks: updatedTasks,
+            renderVersion: Date().timeIntervalSince1970
         )
         
         print("   📤 准备更新 Live Activity...")

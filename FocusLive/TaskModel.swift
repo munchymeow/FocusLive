@@ -37,6 +37,12 @@ enum Priority: String, Codable {
     case urgent
 }
 
+/// 任务类型：待办 / 提醒
+enum TaskType: String, Codable {
+    case todo
+    case reminder
+}
+
 /// 附件类型
 struct Attachment: Codable, Hashable {
     let id: UUID
@@ -58,6 +64,7 @@ final class TaskItem {
     var title: String
     var isCompleted: Bool
     var isPrivate: Bool?
+    var taskType: TaskType?
     var dueDate: Date?
     var sortOrder: Int?
     var taskGroup: TaskGroup?
@@ -77,6 +84,7 @@ final class TaskItem {
     ///   - title: 任务标题
     ///   - isCompleted: 是否已完成
     ///   - isPrivate: 是否为隐私任务
+    ///   - taskType: 任务类型（待办/提醒）
     ///   - dueDate: 截止时间
     ///   - sortOrder: 排序权重
     ///   - scheduledTime: 计划时间
@@ -91,6 +99,7 @@ final class TaskItem {
         title: String,
         isCompleted: Bool = false,
         isPrivate: Bool = false,
+        taskType: TaskType = .todo,
         dueDate: Date? = nil,
         sortOrder: Int? = 0,
         scheduledTime: Date? = nil,
@@ -105,6 +114,7 @@ final class TaskItem {
         self.title = title
         self.isCompleted = isCompleted
         self.isPrivate = isPrivate
+        self.taskType = taskType
         self.dueDate = dueDate
         self.sortOrder = sortOrder
         self.scheduledTime = scheduledTime
@@ -114,6 +124,11 @@ final class TaskItem {
         self.reminderType = reminderType
         self.priority = priority
         self.attachments = attachments
+    }
+
+    /// 是否为提醒事项（提醒事项不需要完成）
+    var isReminder: Bool {
+        taskType == .reminder
     }
 }
 
@@ -267,6 +282,7 @@ struct TaskItemSnapshot: Codable, Hashable {
     let id: String
     let title: String
     let isCompleted: Bool
+    let taskType: TaskType?
     let dueDate: Date?
     let scheduledTime: Date?
     let repeatType: RepeatType?
@@ -281,6 +297,7 @@ struct TaskItemSnapshot: Codable, Hashable {
         self.id = item.id.uuidString
         self.title = item.title
         self.isCompleted = item.isCompleted
+        self.taskType = item.taskType
         self.dueDate = item.dueDate
         self.scheduledTime = item.scheduledTime
         self.repeatType = item.repeatType
@@ -292,10 +309,11 @@ struct TaskItemSnapshot: Codable, Hashable {
     }
     
     /// 直接创建快照（用于更新状态）
-    init(id: String, title: String, isCompleted: Bool, dueDate: Date? = nil, scheduledTime: Date? = nil, repeatType: RepeatType? = nil, repeatInterval: Int? = nil, reminderTime: Date? = nil, reminderType: ReminderType? = nil, priority: Priority? = nil, attachments: [Attachment]? = nil) {
+    init(id: String, title: String, isCompleted: Bool, taskType: TaskType? = nil, dueDate: Date? = nil, scheduledTime: Date? = nil, repeatType: RepeatType? = nil, repeatInterval: Int? = nil, reminderTime: Date? = nil, reminderType: ReminderType? = nil, priority: Priority? = nil, attachments: [Attachment]? = nil) {
         self.id = id
         self.title = title
         self.isCompleted = isCompleted
+        self.taskType = taskType
         self.dueDate = dueDate
         self.scheduledTime = scheduledTime
         self.repeatType = repeatType

@@ -85,6 +85,17 @@
 "想要吐槽？点击反馈" = "Feedback or suggestions";
 "该功能正在准备中" = "This feature is coming soon";
 "事项" = "Tasks";
+"添加组件" = "Add";
+"传统待办事项" = "To-do";
+"提醒事项" = "Reminder";
+"添加提醒" = "Add reminder";
+"新提醒分组 %lld" = "New Reminder Group %lld";
+"新提醒" = "New reminder";
+"提醒 %lld" = "%lld reminders";
+"背景透明度：%lld%%" = "Background opacity: %lld%%";
+"数值越小越透明，0% 接近全透明，100% 接近不透明。" = "Lower value means more transparent. 0% is near fully transparent, 100% is near opaque.";
+"液态玻璃透明度" = "Liquid glass opacity";
+"0% 为完全透明，100% 为最强液态玻璃效果。" = "0% is fully transparent, 100% gives the strongest liquid-glass effect.";
 "显示条数" = "Visible items";
 "背景透明度" = "Background opacity";
 "锁屏实时活动" = "Lock screen Live Activity";
