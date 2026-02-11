@@ -6,6 +6,7 @@
 - 支持 iOS 17+、Xcode 15+
 - 使用 SwiftData 存储任务，使用 ActivityKit 管理 Live Activity
 - 交互通过 `LiveActivityIntent` 实现，不一定会打开 App（`openAppWhenRun = false`）
+- 导航栏平台适配：iPhone 使用应用内自定义底部栏；iPad 使用系统 Tab 导航，不显示应用内自定义底栏（Tasks / Me）
 
 快速文件概览
 - `FocusLive/TaskModel.swift`：数据模型（`TaskGroup`、`TaskItem`、`TaskItemSnapshot`）
@@ -17,6 +18,7 @@
 - 使用真机（模拟器对 Live Activities 支持有限）
 - 确保 App Groups 已配置（`group.com.QingTeng.FocusLive`）
 - 在 Xcode 控制台查看同步与 Intent 调试日志
+- iPad 端已取消应用自定义底部菜单栏，遵循系统顶部/侧边导航样式
 
 更多细节请参阅 `QUICKSTART.md` 和 `SETUP_CHECKLIST.md`。
 1. 获取当前所有正在运行的 `Activity.activities`

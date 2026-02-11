@@ -17,16 +17,17 @@ enum RootTab: Int {
 
 struct RootTabView: View {
     @State private var selection: RootTab = .tasks
+    private let usesCustomBottomBar = UIDevice.current.userInterfaceIdiom != .pad
     
     /// 初始化根 Tab 视图并隐藏系统 TabBar
     /// - Parameters: 无
     /// - Returns: RootTabView 实例
     init() {
-        UITabBar.appearance().isHidden = true
+        UITabBar.appearance().isHidden = UIDevice.current.userInterfaceIdiom != .pad
     }
     
     var body: some View {
-        TabView(selection: $selection) {
+        let tabView = TabView(selection: $selection) {
             ContentView()
                 .tag(RootTab.tasks)
                 .tabItem {
@@ -39,9 +40,15 @@ struct RootTabView: View {
                     Label("我的", systemImage: "person.fill")
                 }
         }
-        .toolbar(.hidden, for: .tabBar)
-        .safeAreaInset(edge: .bottom) {
-            tabBar
+
+        if usesCustomBottomBar {
+            tabView
+                .toolbar(.hidden, for: .tabBar)
+                .safeAreaInset(edge: .bottom) {
+                    tabBar
+                }
+        } else {
+            tabView
         }
     }
     
