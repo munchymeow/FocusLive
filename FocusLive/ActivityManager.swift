@@ -9,6 +9,7 @@ import Foundation
 import ActivityKit
 import SwiftUI
 import SwiftData
+import WidgetKit
 
 /// App Group 标识符
 private let appGroupID = "group.com.QingTeng.FocusLive"
@@ -19,6 +20,7 @@ private let dailyMotivationEnabledKey = "dailyMotivationEnabled"
 private let lastMotivationDateKey = "lastMotivationDate"
 private let currentMotivationQuoteKey = "currentMotivationQuote"
 private let currentMotivationAuthorKey = "currentMotivationAuthor"
+private let widgetDisplaySnapshotKey = "widgetDisplaySnapshot"
 
 /// 待同步的任务变更记录
 struct PendingTaskChange: Codable {
@@ -136,6 +138,12 @@ final class ActivityManager {
         
         // 根据每日鼓励开关与分组选择同步励志名言活动
         checkAndCreateMotivationActivityIfNeeded()
+
+        // 持久化主屏 Widget 当前应显示的内容
+        persistWidgetSnapshot(validGroups: validGroups)
+        
+        // 刷新主屏幕小组件
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     /// 检查并创建智能提醒
@@ -679,5 +687,71 @@ final class ActivityManager {
     /// 是否为特殊 Activity（不是普通分组 Activity）
     private func isSpecialActivity(groupID: String) -> Bool {
         groupID.hasPrefix("motivation_") || groupID.hasPrefix("smart_reminder_")
+    }
+
+    // MARK: - 主屏 Widget 快照同步
+
+    private func persistWidgetSnapshot(validGroups: [TaskGroup]) {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
+
+        if let group = validGroups.first {
+            let state = FocusAttributes.ContentState(
+                groupTitle: group.title,
+                groupIcon: group.iconName,
+                tasks: publicTasks(for: group).map { TaskItemSnapshot(from: $0) },
+                renderVersion: Date().timeIntervalSince1970
+            )
+            persistWidgetSnapshot(state: state, defaults: defaults)
+            return
+        }
+
+        if let reminderActivity = Activity<FocusAttributes>.activities.first(where: {
+            $0.attributes.groupID.hasPrefix("smart_reminder_")
+        }) {
+            persistWidgetSnapshot(state: reminderActivity.content.state, defaults: defaults)
+            return
+        }
+
+        let selectedGroups = defaults.array(forKey: allowedGroupIDsKey) as? [String]
+        let isMotivationEnabled = defaults.object(forKey: dailyMotivationEnabledKey) as? Bool ?? true
+        let shouldShowMotivation = isMotivationEnabled && (selectedGroups?.isEmpty == true)
+
+        if shouldShowMotivation {
+            let quote = defaults.string(forKey: currentMotivationQuoteKey) ?? "愿你今天也保持专注。"
+            let author = defaults.string(forKey: currentMotivationAuthorKey)
+            defaults.set([
+                "kind": "motivation",
+                "quote": quote,
+                "author": author ?? ""
+            ], forKey: widgetDisplaySnapshotKey)
+        } else {
+            defaults.set(["kind": "empty"], forKey: widgetDisplaySnapshotKey)
+        }
+    }
+
+    private func persistWidgetSnapshot(state: FocusAttributes.ContentState, defaults: UserDefaults? = nil) {
+        guard let widgetDefaults = defaults ?? UserDefaults(suiteName: appGroupID) else { return }
+
+        let taskDictionaries = state.incompleteTasks.map { task in
+            var dictionary: [String: Any] = [
+                "id": task.id,
+                "title": task.title,
+                "isCompleted": task.isCompleted,
+                "isReminder": task.taskType == .reminder
+            ]
+            if let dueText = task.formattedDueDate {
+                dictionary["dueText"] = dueText
+            }
+            return dictionary
+        }
+
+        widgetDefaults.set([
+            "kind": "tasks",
+            "groupTitle": state.groupTitle,
+            "groupIcon": state.groupIcon,
+            "completedCount": state.completedCount,
+            "totalCount": state.totalCount,
+            "tasks": taskDictionaries
+        ], forKey: widgetDisplaySnapshotKey)
     }
 }

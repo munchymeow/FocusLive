@@ -37,10 +37,11 @@ enum Priority: String, Codable {
     case urgent
 }
 
-/// 任务类型：待办 / 提醒
+/// 任务类型：待办 / 提醒 / 每日打卡
 enum TaskType: String, Codable {
     case todo
     case reminder
+    case dailyCheckIn
 }
 
 /// 附件类型

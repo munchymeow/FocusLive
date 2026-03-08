@@ -144,6 +144,7 @@ struct ContentView: View {
             }
             .onAppear {
                 // 🔑 核心：App 启动时自动同步 Live Activities
+                resetDailyCheckInTasksIfNeeded()
                 syncPendingChanges()  // 先同步待处理的变更
                 syncActivitiesWithGroups()
             }
@@ -154,6 +155,7 @@ struct ContentView: View {
             .onChange(of: scenePhase) { _, newPhase in
                 // 当 App 从后台返回前台时，同步待处理的变更
                 if newPhase == .active {
+                    resetDailyCheckInTasksIfNeeded()
                     syncPendingChanges()
                 }
                 if newPhase != .active {
@@ -185,6 +187,9 @@ struct ContentView: View {
             .confirmationDialog("添加组件", isPresented: $showAddTypeDialog, titleVisibility: .visible) {
                 Button("传统待办事项") {
                     addNewGroup(taskType: .todo)
+                }
+                Button("每日打卡") {
+                    addNewGroup(taskType: .dailyCheckIn)
                 }
                 Button("提醒事项") {
                     addNewGroup(taskType: .reminder)
@@ -622,12 +627,24 @@ struct ContentView: View {
                 continue
             }
             
+            let timestamp = change["timestamp"] as? TimeInterval ?? Date().timeIntervalSince1970
+            let changeDate = Date(timeIntervalSince1970: timestamp)
+            
             // 查找对应的分组和任务
             if let group = taskGroups.first(where: { $0.id.uuidString == groupIDStr }),
                let task = group.tasks.first(where: { $0.id.uuidString == taskIDStr }) {
                 if task.taskType == .reminder {
                     continue
                 }
+                
+                // 如果是每日打卡任务，且变更发生在今天之前，则忽略该变更
+                if task.taskType == .dailyCheckIn {
+                    let today = Calendar.current.startOfDay(for: Date())
+                    if changeDate < today {
+                        continue
+                    }
+                }
+                
                 // 更新任务状态
                 if task.isCompleted != isCompleted {
                     task.isCompleted = isCompleted
@@ -642,6 +659,34 @@ struct ContentView: View {
         // 保存更改
         try? modelContext.save()
         print("📥 待处理变更已全部同步")
+    }
+    
+    /// 检查并重置每日打卡任务
+    private func resetDailyCheckInTasksIfNeeded() {
+        let defaults = UserDefaults.standard
+        let lastResetDateKey = "lastDailyCheckInResetDate"
+        let today = Calendar.current.startOfDay(for: Date())
+        
+        let lastResetDate = defaults.object(forKey: lastResetDateKey) as? Date
+        
+        if lastResetDate == nil || lastResetDate! < today {
+            var hasChanges = false
+            for group in taskGroups {
+                for task in group.tasks {
+                    if task.taskType == .dailyCheckIn && task.isCompleted {
+                        task.isCompleted = false
+                        hasChanges = true
+                    }
+                }
+            }
+            
+            if hasChanges {
+                try? modelContext.save()
+                print("🔄 每日打卡任务已重置")
+            }
+            
+            defaults.set(today, forKey: lastResetDateKey)
+        }
     }
     
     /// 添加新组件（传统待办分组 / 提醒事项分组）
@@ -672,6 +717,8 @@ struct ContentView: View {
         switch taskType {
         case .todo:
             createGroup(isPrivate: isPrivate)
+        case .dailyCheckIn:
+            createDailyCheckInGroup(isPrivate: isPrivate)
         case .reminder:
             createReminderGroup(isPrivate: isPrivate)
         }
@@ -691,6 +738,30 @@ struct ContentView: View {
             tasks: []
         )
         modelContext.insert(newGroup)
+        try? modelContext.save()
+    }
+
+    /// 创建每日打卡分组
+    /// - Parameter isPrivate: 是否为隐私分组
+    private func createDailyCheckInGroup(isPrivate: Bool) {
+        let maxOrder = taskGroups.compactMap { $0.sortOrder }.max() ?? -1
+        let title = String(format: String(localized: "新打卡分组 %lld"), Int64(taskGroups.count + 1))
+        let checkInGroup = TaskGroup(
+            title: title,
+            iconName: "📅",
+            isPrivate: isPrivate,
+            sortOrder: maxOrder + 1,
+            tasks: []
+        )
+        let checkInTask = TaskItem(
+            title: String(localized: "新打卡"),
+            isCompleted: false,
+            isPrivate: isPrivate,
+            taskType: .dailyCheckIn,
+            sortOrder: 0
+        )
+        checkInGroup.tasks.append(checkInTask)
+        modelContext.insert(checkInGroup)
         try? modelContext.save()
     }
 
@@ -1046,7 +1117,7 @@ struct TaskGroupCard: View {
                     HStack(spacing: 8) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 18))
-                        Text(defaultTaskTypeForAdd == .reminder ? "添加提醒" : "添加任务")
+                        Text(defaultTaskTypeForAdd == .reminder ? "添加提醒" : (defaultTaskTypeForAdd == .dailyCheckIn ? "添加打卡" : "添加任务"))
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
@@ -1150,7 +1221,7 @@ struct TaskGroupCard: View {
         let maxOrder = group.tasks.compactMap { $0.sortOrder }.max() ?? -1
         let taskType = defaultTaskTypeForAdd
         let newTask = TaskItem(
-            title: String(localized: taskType == .reminder ? "新提醒" : "新任务"),
+            title: String(localized: taskType == .reminder ? "新提醒" : (taskType == .dailyCheckIn ? "新打卡" : "新任务")),
             isCompleted: false,
             isPrivate: group.isPrivate ?? false,
             taskType: taskType,
@@ -1164,6 +1235,9 @@ struct TaskGroupCard: View {
     private var defaultTaskTypeForAdd: TaskType {
         if group.tasks.contains(where: { $0.taskType == .reminder }) && !group.tasks.contains(where: { $0.taskType != .reminder }) {
             return .reminder
+        }
+        if group.tasks.contains(where: { $0.taskType == .dailyCheckIn }) && !group.tasks.contains(where: { $0.taskType != .dailyCheckIn }) {
+            return .dailyCheckIn
         }
         return .todo
     }
@@ -1306,6 +1380,10 @@ struct TaskRow: View {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 12, weight: .bold))
                                 .foregroundStyle(.white)
+                        } else if task.taskType == .dailyCheckIn {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.blue.opacity(0.5))
                         }
                     }
                 }

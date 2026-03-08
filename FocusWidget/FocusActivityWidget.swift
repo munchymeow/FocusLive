@@ -589,9 +589,6 @@ struct TaskRowView: View {
     var font: Font = .subheadline
     
     var body: some View {
-        // 调试：打印参数
-        let _ = print("🔘 [TaskRowView] 渲染: groupID=\(groupID), taskID=\(task.id), title=\(task.title)")
-
         if task.taskType == .reminder {
             HStack(spacing: 10) {
                 Image(systemName: "bell.fill")
@@ -606,7 +603,6 @@ struct TaskRowView: View {
                 
                 Spacer(minLength: 0)
                 
-                // 日期显示在右边
                 if let dateStr = task.formattedDueDate {
                     Text(dateStr)
                         .font(.caption2)
@@ -619,12 +615,10 @@ struct TaskRowView: View {
             // 使用 Button + LiveActivityIntent 实现不打开 App 的交互
             Button(intent: ToggleTaskIntent(groupID: groupID, taskID: task.id)) {
                 HStack(spacing: 10) {
-                    // 圆圈图标
                     Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: iconSize, weight: .medium))
                         .foregroundStyle(task.isCompleted ? .green : .gray)
                     
-                    // 任务标题
                     Text(task.title)
                         .font(font)
                         .fontWeight(.medium)
@@ -634,7 +628,6 @@ struct TaskRowView: View {
                     
                     Spacer(minLength: 0)
                     
-                    // 日期显示在右边
                     if let dateStr = task.formattedDueDate {
                         Text(dateStr)
                             .font(.caption2)
