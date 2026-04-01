@@ -798,8 +798,9 @@ struct ContentView: View {
         group.sortOrder = prevGroup.sortOrder ?? 0
         prevGroup.sortOrder = tempOrder
         try? modelContext.save()
+        syncActivitiesWithGroups()
     }
-    
+
     /// 下移分组
     private func moveGroupDown(_ group: TaskGroup) {
         let sorted = sortedGroups
@@ -809,6 +810,7 @@ struct ContentView: View {
         group.sortOrder = nextGroup.sortOrder ?? 0
         nextGroup.sortOrder = tempOrder
         try? modelContext.save()
+        syncActivitiesWithGroups()
     }
     
     /// 结束所有 Live Activities
@@ -907,10 +909,12 @@ struct TaskGroupCard: View {
     let allowsTaskReorder: Bool
     let isProUser: Bool
     let onRequireSubscription: () -> Void
-    var onMoveUp: () -> Void = {}    // 修复：语法正确应该是闭包类型，如 {} 或 { _: TaskGroup in }
+    var onMoveUp: () -> Void = {}
     var onMoveDown: () -> Void = {}
     var canMoveUp: Bool = true
     var canMoveDown: Bool = true
+
+    @Query private var allGroups: [TaskGroup]
     
     @State private var isExpanded = true
     @State private var isEditingTitle = false
@@ -1155,33 +1159,42 @@ struct TaskGroupCard: View {
             Button(action: { showIconPicker = true }) {
                 Label("更换图标", systemImage: "face.smiling")
             }
-            
+
             Button(action: {
                 editedTitle = group.title
                 isEditingTitle = true
             }) {
                 Label("编辑名称", systemImage: "pencil")
             }
-            
+
             Button(action: { showAdvancedGroupEditor = true }) {
                 Label("高级设置", systemImage: "gear")
             }
-            
+
             if canMoveUp {
                 Button(action: onMoveUp) {
                     Label("上移", systemImage: "arrow.up")
                 }
             }
-            
+
             if canMoveDown {
                 Button(action: onMoveDown) {
                     Label("下移", systemImage: "arrow.down")
                 }
             }
-            
+
             Button(role: .destructive, action: deleteGroup) {
                 Label("删除分组", systemImage: "trash")
             }
+        }
+        .sheet(isPresented: $showIconPicker) {
+            IconPickerView(selectedIcon: $group.iconName) {
+                try? modelContext.save()
+                updateLiveActivity()
+            }
+        }
+        .sheet(isPresented: $showAdvancedGroupEditor) {
+            AdvancedGroupEditor(group: group, modelContext: modelContext, onUpdate: updateLiveActivity)
         }
     }
     
@@ -1207,10 +1220,7 @@ struct TaskGroupCard: View {
     
     private func updateLiveActivity() {
         Task { @MainActor in
-            ActivityManager.shared.updateActivity(
-                groupID: group.id.uuidString,
-                group: group
-            )
+            ActivityManager.shared.syncActivities(groups: allGroups)
         }
     }
     
@@ -1478,18 +1488,18 @@ struct TaskRow: View {
             Button(action: togglePrivacy) {
                 Label((task.isPrivate ?? false) ? "取消隐私" : "设为隐私", systemImage: "lock")
             }
-            
+
             Button(action: {
                 editedTitle = task.title
                 isEditing = true
             }) {
                 Label("编辑", systemImage: "pencil")
             }
-            
+
             Button(action: { showDatePicker = true }) {
                 Label(task.dueDate == nil ? "设置时间" : "修改时间", systemImage: "calendar")
             }
-            
+
             if task.dueDate != nil {
                 Button(action: {
                     task.dueDate = nil
@@ -1499,23 +1509,27 @@ struct TaskRow: View {
                     Label("清除时间", systemImage: "calendar.badge.minus")
                 }
             }
-            
+
+            Button(action: { showAdvancedEditor = true }) {
+                Label("高级设置", systemImage: "gear")
+            }
+
             Divider()
-            
+
             if canMoveUp {
                 Button(action: onMoveUp) {
                     Label("上移", systemImage: "arrow.up")
                 }
             }
-            
+
             if canMoveDown {
                 Button(action: onMoveDown) {
                     Label("下移", systemImage: "arrow.down")
                 }
             }
-            
+
             Divider()
-            
+
             Button(role: .destructive, action: deleteTask) {
                 Label("删除", systemImage: "trash")
             }
@@ -1629,10 +1643,20 @@ struct AdvancedTaskEditor: View {
     @State private var selectedRepeatType: RepeatType = .none
     @State private var repeatInterval: Int = 1
     @State private var attachments: [Attachment] = []
-    
+    @State private var selectedTaskType: TaskType = .todo
+
     var body: some View {
         NavigationView {
             Form {
+                Section(header: Text("事项类型")) {
+                    Picker("类型", selection: $selectedTaskType) {
+                        Text("传统待办").tag(TaskType.todo)
+                        Text("每日打卡").tag(TaskType.dailyCheckIn)
+                        Text("提醒事项").tag(TaskType.reminder)
+                    }
+                    .pickerStyle(.segmented)
+                }
+
                 Section(header: Text("计划时间")) {
                     Toggle("设置计划时间", isOn: Binding(
                         get: { task.scheduledTime != nil },
@@ -1718,6 +1742,7 @@ struct AdvancedTaskEditor: View {
                 }
             }
             .onAppear {
+                selectedTaskType = task.taskType ?? .todo
                 selectedScheduledTime = task.scheduledTime ?? Date()
                 selectedReminderType = task.reminderType ?? .none
                 selectedPriority = task.priority ?? .medium
@@ -1729,15 +1754,16 @@ struct AdvancedTaskEditor: View {
     }
     
     private func saveChanges() {
+        task.taskType = selectedTaskType
         task.repeatType = selectedRepeatType == .none ? nil : selectedRepeatType
         task.repeatInterval = selectedRepeatType == .none ? nil : repeatInterval
         task.reminderType = selectedReminderType == .none ? nil : selectedReminderType
         task.priority = selectedPriority
-        
+
         try? modelContext.save()
         onUpdate()
     }
-    
+
     private func addAttachment() {
         // 这里可以实现添加附件的逻辑
         // 暂时添加一个示例附件

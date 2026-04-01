@@ -13,6 +13,7 @@ struct LiveActivitySettingsView: View {
     private static let appGroupID = "group.com.QingTeng.FocusLive"
     private static let displayCountKey = "liveActivityMaxCount"
     private static let opacityKey = "liveActivityBackgroundOpacity"
+    private static let fontSizeKey = "liveActivityFontSize"
     private static let proStatusKey = "isProUser"
     private static let allowedGroupIDsKey = "liveActivityAllowedGroupIDs"
     private static let smartReminderKey = "smartReminderEnabled"
@@ -22,6 +23,10 @@ struct LiveActivitySettingsView: View {
     
     @AppStorage(Self.opacityKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var backgroundOpacity: Double = 0.0
+
+    /// 字体大小缩放比例 (0.8 ~ 1.4，默认 1.0)
+    @AppStorage(Self.fontSizeKey, store: UserDefaults(suiteName: Self.appGroupID))
+    private var fontSizeScale: Double = 1.0
     
     @AppStorage(Self.proStatusKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var isProUser: Bool = false
@@ -82,24 +87,47 @@ struct LiveActivitySettingsView: View {
                 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("液态玻璃透明度")
+                        Text("背景不透明度")
                         Spacer()
-                        Text(String(format: String(localized: "背景透明度：%lld%%"), Int64(backgroundOpacity * 100)))
+                        Text(String(format: String(localized: "不透明度：%lld%%"), Int64(backgroundOpacity * 100)))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
                     Slider(value: $backgroundOpacity, in: 0.0...1.0, step: 0.1) {
-                        Text("背景透明度")
+                        Text("背景不透明度")
                     } minimumValueLabel: {
                         Text("0%")
                     } maximumValueLabel: {
                         Text("100%")
                     }
 
-                    Text("0% 为完全透明，100% 为最强液态玻璃效果。")
+                    Text("0% 完全透明（无背景），100% 为不透明纯色背景。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("任务字体大小")
+                        Spacer()
+                        Text(String(format: "%.0f%%", fontSizeScale * 100))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Slider(value: $fontSizeScale, in: 0.7...1.4, step: 0.05) {
+                        Text("字体大小")
+                    } minimumValueLabel: {
+                        Text("小")
+                            .font(.caption2)
+                    } maximumValueLabel: {
+                        Text("大")
+                            .font(.caption2)
+                    }
+                }
+                .onChange(of: fontSizeScale) { _, _ in
+                    syncLiveActivities()
                 }
             } header: {
                 Text("锁屏实时活动")
@@ -110,10 +138,18 @@ struct LiveActivitySettingsView: View {
             if isProUser {
                 Section {
                     Toggle("智能提醒", isOn: $smartReminderEnabled)
+                        .onChange(of: smartReminderEnabled) { _, newValue in
+                            if newValue {
+                                Task {
+                                    await NotificationManager.shared.requestPermission()
+                                }
+                            }
+                            syncLiveActivities()
+                        }
                 } header: {
                     Text("高级功能")
                 } footer: {
-                    Text("开启后，锁屏页会首要显示距离截止时间最近的任务，并显示倒计时提醒。")
+                    Text("开启后，系统会在任务计划时间前 2 小时自动发送本地通知提醒，同时锁屏页优先显示最近截止的任务。")
                 }
             }
             

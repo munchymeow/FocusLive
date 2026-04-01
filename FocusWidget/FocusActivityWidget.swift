@@ -14,6 +14,7 @@ import UIKit
 private let appGroupID = "group.com.QingTeng.FocusLive"
 private let liveActivityDisplayCountKey = "liveActivityMaxCount"
 private let liveActivityOpacityKey = "liveActivityBackgroundOpacity"
+private let liveActivityFontSizeKey = "liveActivityFontSize"
 private let proStatusKey = "isProUser"
 private let compactViewKey = "compactViewEnabled"
 
@@ -203,9 +204,9 @@ struct LockScreenLiveActivityView: View {
         context.state.todoIncompleteTasks.isEmpty && context.state.totalCount > 0
     }
     
-    /// 显示的任务数量（最多5项）
+    /// 显示的任务数量（未完成+已完成，最多受 maxDisplayCount 限制）
     private var displayTaskCount: Int {
-        min(context.state.incompleteTasks.count, maxDisplayCount)
+        min(allDisplayTasks.count, maxDisplayCount)
     }
 
     /// 用户设置的最大显示条数
@@ -291,6 +292,49 @@ struct LockScreenLiveActivityView: View {
     /// 当前会员状态
     private var isProUser: Bool {
         UserDefaults(suiteName: appGroupID)?.bool(forKey: proStatusKey) ?? false
+    }
+
+    /// 用户设置的字体大小缩放比例（0.7 ~ 1.4，默认 1.0）
+    private var fontSizeScale: CGFloat {
+        let value = UserDefaults(suiteName: appGroupID)?
+            .object(forKey: liveActivityFontSizeKey) as? Double ?? 1.0
+        return CGFloat(min(max(value, 0.7), 1.4))
+    }
+
+    /// 当不透明度为100%时，应强制使用与背景对比的前景色方案
+    private var forcedColorScheme: ColorScheme? {
+        guard backgroundOpacity >= 1.0 else { return nil }
+        return isDarkAppearance ? .dark : .light
+    }
+
+    /// 锁屏显示任务列表：未完成/提醒事项在前，已完成待办附在后（划线保留）
+    private var allDisplayTasks: [TaskItemSnapshot] {
+        let active = context.state.incompleteTasks   // 未完成 + 提醒
+        let done = context.state.todoTasks.filter { $0.isCompleted }
+        return active + done
+    }
+
+    /// 根据字体缩放比例计算任务行字号
+    private var scaledTaskFont: Font {
+        let base: CGFloat
+        switch displayTaskCount {
+        case 0...2: base = 20
+        case 3...5: base = 17
+        case 6...8: base = 16
+        default: base = 14
+        }
+        return .system(size: base * fontSizeScale, weight: .medium)
+    }
+
+    private var scaledCompactFont: Font {
+        let base: CGFloat
+        switch displayTaskCount {
+        case 0...4: base = 12
+        case 5...6: base = 11
+        case 7...8: base = 10
+        default: base = 10
+        }
+        return .system(size: base * fontSizeScale, weight: .medium)
     }
     
     /// 根据任务数量计算头部字号
@@ -412,21 +456,21 @@ struct LockScreenLiveActivityView: View {
             }
             .padding(.horizontal, 4)
             
-            // 任务列表（最多显示用户设置的条数）
-            if !context.state.incompleteTasks.isEmpty {
+            // 任务列表（最多显示用户设置的条数，已完成任务保留显示并划线）
+            if !allDisplayTasks.isEmpty {
                 if isCompactView {
                     // 紧凑模式：双列网格布局
-                    let tasks = Array(context.state.incompleteTasks.prefix(displayTaskCount))
+                    let tasks = Array(allDisplayTasks.prefix(displayTaskCount))
                     let columns = [GridItem(.flexible()), GridItem(.flexible())]
-                    let rows = min(Int(ceil(Double(tasks.count) / 2.0)), 5) // 最多5行
-                    
+                    let rows = min(Int(ceil(Double(tasks.count) / 2.0)), 5)
+
                     LazyVGrid(columns: columns, spacing: compactRowSpacing) {
                         ForEach(tasks.indices, id: \.self) { index in
                             TaskRowView(
                                 task: tasks[index],
                                 groupID: context.attributes.groupID,
                                 iconSize: compactIconSize,
-                                font: compactFont
+                                font: scaledCompactFont
                             )
                             .frame(maxWidth: .infinity)
                         }
@@ -435,12 +479,12 @@ struct LockScreenLiveActivityView: View {
                 } else {
                     // 普通模式：单列布局
                     VStack(alignment: .leading, spacing: taskSpacing) {
-                        ForEach(Array(context.state.incompleteTasks.prefix(displayTaskCount)), id: \.id) { task in
+                        ForEach(Array(allDisplayTasks.prefix(displayTaskCount)), id: \.id) { task in
                             TaskRowView(
                                 task: task,
                                 groupID: context.attributes.groupID,
                                 iconSize: taskIconSize,
-                                font: taskFont
+                                font: scaledTaskFont
                             )
                             .padding(.horizontal, 4)
                         }
@@ -468,8 +512,9 @@ struct LockScreenLiveActivityView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
         .background(glassBackground)
+        .environment(\.colorScheme, forcedColorScheme ?? .dark)
         .activityBackgroundTint(.clear)
-        .activitySystemActionForegroundColor(Color.primary)
+        .activitySystemActionForegroundColor(forcedColorScheme == .light ? Color.black : Color.white)
         }
     }
     

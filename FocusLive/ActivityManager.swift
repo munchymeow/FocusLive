@@ -131,9 +131,21 @@ final class ActivityManager {
         
         print("✅ 同步完成！")
         
-        // 检查并创建智能提醒（仅Pro用户且开启开关）
+        // 检查并创建智能提醒 Live Activity（仅Pro用户且开启开关）
         if isProUser && isSmartReminderEnabled() {
             checkAndCreateSmartReminders(groups: groups)
+        }
+
+        // 调度/取消本地通知智能提醒
+        if isProUser && isSmartReminderEnabled() {
+            Task {
+                let granted = await NotificationManager.shared.requestPermission()
+                if granted {
+                    NotificationManager.shared.rescheduleSmartReminders(groups: groups)
+                }
+            }
+        } else {
+            NotificationManager.shared.cancelAllSmartReminders()
         }
         
         // 根据每日鼓励开关与分组选择同步励志名言活动
