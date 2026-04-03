@@ -9,10 +9,12 @@ import SwiftUI
 import SwiftData
 
 /// App Group 标识符
-private let appGroupID = "group.zhaohaowei.FocusLive"
+private let appGroupID = "group.com.QingTeng.FocusLive"
 
 @main
 struct FocusLiveApp: App {
+    @StateObject private var storeKitManager = StoreKitManager()
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             TaskGroup.self,
@@ -41,10 +43,11 @@ struct FocusLiveApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootTabView()
                 .onOpenURL { url in
                     handleURL(url)
                 }
+                .environmentObject(storeKitManager)
         }
         .modelContainer(sharedModelContainer)
     }

@@ -11,9 +11,11 @@
 import Foundation
 import AppIntents
 import ActivityKit
+import WidgetKit
 
 /// App Group 标识符（用于数据共享）
-private let appGroupID = "group.zhaohaowei.FocusLive"
+private let appGroupID = "group.com.QingTeng.FocusLive"
+private let widgetDisplaySnapshotKey = "widgetDisplaySnapshot"
 
 /// 切换任务完成状态的交互意图
 /// 用于 Live Activity 锁屏交互，点击小圆点标记任务完成
@@ -83,6 +85,11 @@ struct ToggleTaskIntent: LiveActivityIntent {
         }
         
         let currentTask = updatedTasks[index]
+        if currentTask.taskType == .reminder {
+            print("   ℹ️ 提醒事项不支持完成状态切换，忽略操作")
+            print("═══════════════════════════════════════════")
+            return .result()
+        }
         let newCompletedStatus = !currentTask.isCompleted
         
         print("   🔄 准备更新任务:")
@@ -95,6 +102,7 @@ struct ToggleTaskIntent: LiveActivityIntent {
             id: currentTask.id,
             title: currentTask.title,
             isCompleted: newCompletedStatus,
+            taskType: currentTask.taskType,
             dueDate: currentTask.dueDate
         )
         
@@ -104,7 +112,8 @@ struct ToggleTaskIntent: LiveActivityIntent {
         let newState = FocusAttributes.ContentState(
             groupTitle: activity.content.state.groupTitle,
             groupIcon: activity.content.state.groupIcon,
-            tasks: updatedTasks
+            tasks: updatedTasks,
+            renderVersion: Date().timeIntervalSince1970
         )
         
         print("   📤 准备更新 Live Activity...")
@@ -116,6 +125,10 @@ struct ToggleTaskIntent: LiveActivityIntent {
         
         // 通过 App Groups 保存变更，供主 App 同步
         saveTaskChangeToAppGroup(groupID: groupID, taskID: taskID, isCompleted: newCompletedStatus)
+        saveWidgetSnapshotToAppGroup(state: newState)
+        
+        // 刷新主屏幕小组件
+        WidgetCenter.shared.reloadAllTimelines()
         
         print("═══════════════════════════════════════════")
         print("🎉 [ToggleTaskIntent] 执行完成!")
@@ -145,5 +158,36 @@ struct ToggleTaskIntent: LiveActivityIntent {
         defaults.set(pendingChanges, forKey: "pendingTaskChanges")
         
         print("   💾 变更已保存到 App Groups，等待主 App 同步")
+    }
+
+    private func saveWidgetSnapshotToAppGroup(state: FocusAttributes.ContentState) {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            print("   ⚠️ 无法写入 Widget 快照")
+            return
+        }
+
+        let tasks = state.incompleteTasks.map { task in
+            var dictionary: [String: Any] = [
+                "id": task.id,
+                "title": task.title,
+                "isCompleted": task.isCompleted,
+                "isReminder": task.taskType == .reminder
+            ]
+            if let dueText = task.formattedDueDate {
+                dictionary["dueText"] = dueText
+            }
+            return dictionary
+        }
+
+        defaults.set([
+            "kind": "tasks",
+            "groupTitle": state.groupTitle,
+            "groupIcon": state.groupIcon,
+            "completedCount": state.completedCount,
+            "totalCount": state.totalCount,
+            "tasks": tasks
+        ], forKey: widgetDisplaySnapshotKey)
+
+        print("   🧩 Widget 快照已同步到 App Groups")
     }
 }
