@@ -1,5 +1,16 @@
 # ActivityKit 技术详解
 
+## 当前实现快照（2026-04-03）
+
+- 首页默认筛选为 `全部`
+- 筛选顺序为 `全部 / 未完成 / 已完成 / 隐私空间`
+- 首次启动会进入交互式新手教程，并直接写入实时活动相关设置
+- 锁屏卡片默认字号为 `150%`
+- 锁屏卡片背景仅保留 `透明 / 不透明` 两种模式
+- 已完成事项可按设置决定是否显示，并以横线标记
+- 每日鼓励可独立开启，支持首页底部展示、锁屏鼓励卡片同步、手动刷新和自定义
+- 顶部 `+` 按钮使用锚定式菜单，不再使用底部确认弹层
+
 ## 核心概念深度解析
 
 ### 1. Activity 的生命周期
@@ -303,23 +314,30 @@ class ActivityManagerTests: XCTestCase {
 }
 ```
 
-### 9. App Groups 数据共享（可选）
+### 9. App Groups 数据共享（当前实现）
 
-如果需要 App 和 Widget 双向同步：
+本项目已经使用 App Groups 在 App、Live Activity 与 Widget 之间共享状态：
 
 ```swift
-// 1. 在 Entitlements 中添加 App Groups
-
-// 2. 使用 UserDefaults 共享
 let sharedDefaults = UserDefaults(suiteName: "group.com.QingTeng.FocusLive")
-sharedDefaults?.set(data, forKey: "tasks")
-
-// 3. 在 Intent 中读取
-let sharedDefaults = UserDefaults(suiteName: "group.com.QingTeng.FocusLive")
-if let data = sharedDefaults?.data(forKey: "tasks") {
-    // 解析并更新主 App
-}
+sharedDefaults?.set(data, forKey: "pendingTaskChanges")
 ```
+
+当前共享的核心内容包括：
+
+- `pendingTaskChanges`：锁屏勾选任务后的待回写变更
+- `liveActivityFontSize`：实时活动字体大小
+- `liveActivityBackgroundOpacity`：透明 / 不透明背景模式
+- `liveActivityShowCompletedTasks`：是否显示已完成事项
+- `dailyMotivationEnabled`：每日鼓励开关
+- `currentMotivationQuote` / `currentMotivationAuthor`：当前每日鼓励内容
+
+这部分逻辑主要分布在：
+
+- `FocusLive/ActivityManager.swift`
+- `FocusLive/ContentView.swift`
+- `FocusLive/ToggleTaskIntent.swift`
+- `FocusWidget/FocusActivityWidget.swift`
 
 ### 10. 调试技巧
 

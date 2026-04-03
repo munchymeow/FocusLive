@@ -1,278 +1,135 @@
 # FocusLive 配置检查清单
 
-## 📋 运行前必须检查的配置
+## 1. 基础环境
 
-### 1. Xcode 项目设置
+- [ ] Xcode 15+
+- [ ] iOS 17+
+- [ ] 已选择真机进行锁屏 / 灵动岛验证
+- [ ] 如果只是改 UI，可接受先用模拟器
 
-#### ✅ Target 配置
+## 2. Signing & Capabilities
 
-**主 App (FocusLive):**
-- [ ] Deployment Target: iOS 17.0 或更高
-- [ ] Bundle Identifier: 确保唯一（如 `com.zhaohaowei.FocusLive`）
-- [ ] Signing & Capabilities: 
-  - [ ] 添加 **App Groups** capability
-  - [ ] Group Name: `group.com.QingTeng.FocusLive`（需与代码中一致）
+### 主 App：`FocusLive`
 
-**Widget Extension (FocusWidget):**
-- [ ] Deployment Target: iOS 17.0 或更高
-- [ ] Bundle Identifier: 必须是主 App 的子路径（如 `com.zhaohaowei.FocusLive.FocusWidget`）
-- [ ] Signing & Capabilities:
-  - [ ] 添加 **App Groups** capability
-  - [ ] Group Name: `group.com.QingTeng.FocusLive`（必须与主 App 完全一致）
+- [ ] Bundle Identifier 唯一
+- [ ] 已开启 `Automatically manage signing`
+- [ ] 已添加 `App Groups`
+- [ ] Group Name 为 `group.com.QingTeng.FocusLive`
 
-#### ✅ Info.plist 配置
+### Widget Extension：`FocusWidgetExtension`
 
-**FocusLive/Info.plist:**
-```xml
-<key>NSSupportsLiveActivities</key>
-<true/>
-```
+- [ ] Bundle Identifier 为主 App 的子路径
+- [ ] 已开启 `Automatically manage signing`
+- [ ] 已添加 `App Groups`
+- [ ] Group Name 同样为 `group.com.QingTeng.FocusLive`
 
-**FocusWidget/Info.plist:**
-- [ ] 确保 `NSExtension` 配置正确
-- [ ] `NSExtensionPointIdentifier` = `com.apple.widgetkit-extension`
+## 3. Info.plist / Entitlements
 
-### 2. 文件引用检查
+- [ ] `FocusLive/Info.plist` 已开启 `NSSupportsLiveActivities`
+- [ ] `FocusLive/FocusLive.entitlements` 包含 App Group
+- [ ] `FocusWidgetExtension.entitlements` 包含同一个 App Group
 
-确保以下文件在正确的 Target 中：
+## 4. 关键文件检查
 
-**FocusLive Target 应包含：**
-- [x] FocusLiveApp.swift
-- [x] ContentView.swift
-- [x] TaskModel.swift
-- [x] FocusAttributes.swift
-- [x] ActivityManager.swift
+### 主 App 侧
 
-**FocusWidget Target 应包含：**
-- [x] FocusWidgetBundle.swift
-- [x] FocusActivityWidget.swift
-- [x] FocusWidgetLiveActivity.swift
-- [x] ToggleIntent.swift
-- [x] FocusAttributes.swift ⚠️ **重要：需要同时添加到两个 Target**
-- [x] TaskModel.swift ⚠️ **重要：需要同时添加到两个 Target**
+- [ ] `FocusLive/ContentView.swift`
+- [ ] `FocusLive/ActivityManager.swift`
+- [ ] `FocusLive/LiveActivitySettingsView.swift`
+- [ ] `FocusLive/ToggleTaskIntent.swift`
+- [ ] `FocusLive/TaskModel.swift`
+- [ ] `FocusLive/FocusAttributes.swift`
 
-**检查方法：**
-1. 选中文件（如 `FocusAttributes.swift`）
-2. 打开右侧 File Inspector
-3. 在 "Target Membership" 中勾选 **FocusLive** 和 **FocusWidget**
+### Widget / Live Activity 侧
 
-### 3. 共享文件配置
+- [ ] `FocusWidget/FocusWidgetBundle.swift`
+- [ ] `FocusWidget/FocusWidget.swift`
+- [ ] `FocusWidget/FocusActivityWidget.swift`
+- [ ] `FocusWidget/FocusWidgetLiveActivity.swift`
+- [ ] `FocusWidget/AppIntent.swift`
 
-以下文件必须同时添加到两个 Target：
+### 共享模型
 
-```
-✅ FocusAttributes.swift    # Live Activity 数据结构
-✅ TaskModel.swift          # TaskItemSnapshot 用于 Widget
-```
+- [ ] `FocusLive/TaskModel.swift` 同时加入需要的 Target
+- [ ] `FocusLive/FocusAttributes.swift` 同时加入需要的 Target
 
-**如果没有正确配置，会出现以下错误：**
-```
-Cannot find type 'FocusAttributes' in scope
-Cannot find type 'TaskItemSnapshot' in scope
-```
+如果 Widget 侧找不到共享类型，优先检查 Target Membership。
 
-### 4. Entitlements 文件
+## 5. 首次运行验证
 
-**FocusLive/FocusLive.entitlements:**
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.security.application-groups</key>
-    <array>
-        <string>group.com.QingTeng.FocusLive</string>
-    </array>
-</dict>
-</plist>
-```
+- [ ] App 首次启动会自动弹出新手教程
+- [ ] 教程中可直接调节字体大小
+- [ ] 教程中可预览实时活动样式
+- [ ] 教程中可设置常用开关
+- [ ] 完成教程后进入首页默认 `全部`
 
-**FocusWidgetExtension.entitlements:**
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.security.application-groups</key>
-    <array>
-        <string>group.com.QingTeng.FocusLive</string>
-    </array>
-</dict>
-</plist>
-```
+## 6. 首页行为验证
 
-### 5. 编译错误排查
+- [ ] 筛选顺序为 `全部 / 未完成 / 已完成 / 隐私空间`
+- [ ] 默认首页筛选是 `全部`
+- [ ] `+` 按钮弹出的是按钮下方菜单，而不是底部弹层
+- [ ] `全部` 页底部可显示 `每日鼓励`
+- [ ] 每日鼓励支持刷新和自定义
 
-#### 常见错误 1: "Cannot find type 'FocusAttributes'"
+## 7. 锁屏实时活动验证
 
-**原因：** FocusAttributes.swift 没有添加到 FocusWidget Target
+- [ ] 有未完成事项的分组会自动创建 Live Activity
+- [ ] 标题和任务内容字号同步变化
+- [ ] 默认字体大小为 `150%`
+- [ ] 背景模式支持透明 / 不透明
+- [ ] 已完成事项可按设置决定是否显示
+- [ ] 若显示已完成事项，锁屏上会用横线标记
+- [ ] 锁屏点击任务后能回写到 App
 
-**解决方案：**
-1. 选中 `FocusAttributes.swift`
-2. 在右侧 File Inspector 中
-3. 勾选 "Target Membership" → **FocusWidget**
+## 8. 灵动岛验证
 
-#### 常见错误 2: "Value of type 'Activity<FocusAttributes>' has no member 'activities'"
+- [ ] 设备支持灵动岛（如 iPhone 14 Pro 及以上）
+- [ ] Compact / Expanded 展示正常
+- [ ] 左滑灵动岛可临时关闭显示
 
-**原因：** ActivityKit framework 未导入
+## 9. 设置页验证
 
-**解决方案：**
-在文件顶部添加：
-```swift
-import ActivityKit
-```
+进入 `我的 > 锁屏卡片设置`，确认：
 
-#### 常见错误 3: "Type 'ToggleTaskIntent' does not conform to protocol 'LiveActivityIntent'"
+- [ ] 锁屏显示分组可选
+- [ ] 显示条数可调
+- [ ] 背景透明 / 不透明切换生效
+- [ ] 字体大小、字体颜色切换生效
+- [ ] `显示已完成事项` 开关生效
+- [ ] `每日鼓励` 开关会同时影响首页底部和锁屏鼓励卡片
 
-**原因：** 缺少 `@MainActor` 或 `perform()` 方法签名不正确
+## 10. 调试日志
 
-**解决方案：**
-确保 Intent 定义正确：
-```swift
-struct ToggleTaskIntent: LiveActivityIntent {
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        // ...
-        return .result()
-    }
-}
-```
+运行时 Console 中建议看到类似日志：
 
-### 6. 运行环境检查
-
-#### ✅ 设备要求
-
-- [ ] iOS 17.0 或更高版本
-- [ ] 真机测试（模拟器对 Live Activities 支持有限）
-- [ ] 支持 Dynamic Island 的设备（iPhone 14 Pro 及以上）用于测试灵动岛
-
-#### ✅ 系统设置
-
-运行前确保：
-- [ ] 锁屏通知已开启
-- [ ] App 通知权限已授予
-- [ ] 未开启"专注模式"（可能影响 Live Activities 显示）
-
-### 7. 首次运行步骤
-
-1. **清理构建缓存**
-   ```
-   Product → Clean Build Folder (⇧⌘K)
-   ```
-
-2. **选择真机运行**
-   - 不要使用模拟器（Live Activities 显示不完整）
-
-3. **启动 App**
-   - 首次启动先完成 "新手教程"
-   - 点击右上角 `+` 创建一个分组并添加任务
-   - 观察控制台日志：
-     ```
-     🔄 同步 Live Activities...
-     ✅ 为分组 'xxx' 创建新 Activity
-     ```
-
-4. **锁定屏幕**
-   - 按侧边按钮锁屏
-   - 应该看到 3 个实时活动卡片
-
-5. **测试交互**
-   - 点击任务前的圆圈按钮
-   - 观察任务状态是否切换
-   - 解锁 App，确认数据已同步
-
-### 8. 调试技巧
-
-#### 查看控制台日志
-
-运行 App 时，在 Xcode Console 中应该看到：
-
-```
+```text
 🔄 同步 Live Activities...
    运行中的 Activities: 0 个
-   当前分组数: 3 个
-   ✅ 为分组 '工作' 创建新 Activity
-      ✨ Activity 已创建，ID: 12345678-1234-1234-1234-123456789012
+   当前分组数: 1 个
+   有效分组数(有未完成任务): 1 个
    ✅ 为分组 '晚自修' 创建新 Activity
-      ✨ Activity 已创建，ID: 87654321-4321-4321-4321-210987654321
-   ✅ 为分组 '生活' 创建新 Activity
-      ✨ Activity 已创建，ID: ABCDEFAB-CDEF-CDEF-CDEF-ABCDEFABCDEF
 ✅ 同步完成！
 ```
 
-#### 如果没有日志输出
+如果没有日志：
 
-1. 检查 `ActivityManager.swift` 中的 print 语句
-2. 确认 `syncActivities()` 方法被调用
-3. 在 ContentView 的 `onAppear` 中添加断点
+- [ ] 确认 `ContentView.onAppear` 已触发
+- [ ] 确认 `ActivityManager.syncActivities(groups:)` 已调用
+- [ ] 检查是否没有可显示分组或没有未完成任务
 
-#### 如果锁屏没有显示 Live Activity
+## 11. 构建检查
 
-1. **检查 Info.plist**
-   - 确认 `NSSupportsLiveActivities` = `true`
+```bash
+xcodebuild -scheme FocusLive -project FocusLive.xcodeproj -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet build
+```
 
-2. **检查 Activity 数量限制**
-   ```swift
-   print("当前 Activity 数量: \(Activity<FocusAttributes>.activities.count)")
-   ```
-   - iOS 16.2+: 每个 App 最多 2 个同时运行的 Activity
-   - 如果超过限制，旧的会被自动结束
+- [ ] 构建通过
 
-3. **检查设备设置**
-   - 设置 → 通知 → FocusLive → 允许通知
+## 12. 发布前回归
 
-### 9. 性能测试
-
-#### 内存占用
-
-在 Xcode 中打开 Memory Debugger：
-- 正常情况：< 50MB
-- 如果 > 100MB，检查是否有内存泄漏
-
-#### CPU 占用
-
-- 更新 Activity 时应 < 10%
-- 如果持续 > 50%，检查是否有死循环
-
-### 10. 发布前检查
-
-- [ ] 移除所有 `print()` 调试语句（或使用 `#if DEBUG`）
-- [ ] 测试深色/浅色模式下的 UI
-- [ ] 测试不同语言环境（本地化）
-- [ ] 在多个设备上测试（iPhone 14 Pro, iPhone 15, iPad）
-- [ ] 电池测试（Live Activities 是否过度耗电）
-- [ ] 压力测试（创建/删除 10+ 个分组）
-
-## 🚨 已知问题
-
-1. **模拟器限制**
-   - Live Activities 在模拟器上可能不显示或显示不完整
-   - Dynamic Island 在非支持设备上无法测试
-
-2. **Activity 数量限制**
-   - iOS 16.2-16.4: 每个 App 最多 1 个
-   - iOS 17.0+: 每个 App 最多 2 个
-   - **本项目默认创建 3 个**，需要优化或让用户选择优先级
-
-3. **更新延迟**
-   - 锁屏交互可能有 1-2 秒延迟（系统限制）
-
-## ✅ 配置完成确认
-
-全部勾选后即可运行：
-
-- [ ] Target 设置正确（iOS 17.0+）
-- [ ] App Groups 已配置
-- [ ] 共享文件已添加到两个 Target
-- [ ] Info.plist 已配置 `NSSupportsLiveActivities`
-- [ ] 使用真机测试
-- [ ] 锁屏上能看到 Live Activities
-- [ ] 点击交互正常工作
-- [ ] 控制台有正确的日志输出
-
----
-
-**如果遇到问题，请参考：**
-- [README.md](README.md) - 项目概述
-- [TECHNICAL_GUIDE.md](TECHNICAL_GUIDE.md) - 技术详解
-- Apple Developer Forums - ActivityKit
+- [ ] 浅色 / 深色模式检查
+- [ ] 真机锁屏勾选任务回写检查
+- [ ] 新手教程完整流程检查
+- [ ] 每日鼓励刷新 / 自定义检查
+- [ ] 中英文文案检查
+- [ ] iPhone / iPad 基本布局检查
