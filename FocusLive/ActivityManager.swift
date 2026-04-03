@@ -309,9 +309,10 @@ final class ActivityManager {
             groupTitle: group.title,
             groupIcon: group.iconName,
             tasks: publicTasks.map { TaskItemSnapshot(from: $0) },
-            renderVersion: Date().timeIntervalSince1970
+            renderVersion: Date().timeIntervalSince1970,
+            fontColorName: currentFontColorName()
         )
-        
+
         print("═══════════════════════════════════════════")
         print("📱 [ActivityManager] 创建 Live Activity")
         print("   📌 groupID: \(groupIDString)")
@@ -352,14 +353,15 @@ final class ActivityManager {
             groupTitle: group.title,
             groupIcon: group.iconName,
             tasks: publicTasks.map { TaskItemSnapshot(from: $0) },
-            renderVersion: Date().timeIntervalSince1970
+            renderVersion: Date().timeIntervalSince1970,
+            fontColorName: currentFontColorName()
         )
-        
+
         Task {
             await updateActivityAsync(activity: activity, newState: newState)
         }
     }
-    
+
     /// 异步更新 Activity（避免主线程阻塞）
     private func updateActivityAsync(activity: Activity<FocusAttributes>, newState: FocusAttributes.ContentState) async {
         let content = ActivityContent(state: newState, staleDate: nil)
@@ -389,7 +391,8 @@ final class ActivityManager {
                 groupTitle: activity.content.state.groupTitle,
                 groupIcon: activity.content.state.groupIcon,
                 tasks: updatedTasks,
-                renderVersion: Date().timeIntervalSince1970
+                renderVersion: Date().timeIntervalSince1970,
+                fontColorName: activity.content.state.fontColorName
             )
             
             Task {
@@ -454,6 +457,11 @@ final class ActivityManager {
     /// - Returns: 是否为会员
     private func currentProStatus() -> Bool {
         UserDefaults(suiteName: appGroupID)?.bool(forKey: proStatusKey) ?? false
+    }
+
+    /// 获取当前字体颜色名称
+    private func currentFontColorName() -> String {
+        UserDefaults(suiteName: appGroupID)?.string(forKey: "liveActivityFontColor") ?? "white"
     }
     
     /// 获取智能提醒开关状态

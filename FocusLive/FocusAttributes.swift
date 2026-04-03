@@ -18,6 +18,8 @@ struct FocusAttributes: ActivityAttributes {
         var tasks: [TaskItemSnapshot]
         /// 仅用于强制触发渲染刷新（例如样式设置变化）
         var renderVersion: Double? = nil
+        /// 字体颜色名称（与 liveActivityFontColor UserDefaults key 对应）
+        var fontColorName: String = "white"
 
         /// 传统待办（用于进度统计）
         var todoTasks: [TaskItemSnapshot] {

@@ -14,7 +14,8 @@ import UIKit
 private let appGroupID = "group.com.QingTeng.FocusLive"
 private let liveActivityDisplayCountKey = "liveActivityMaxCount"
 private let liveActivityOpacityKey = "liveActivityBackgroundOpacity"
-private let liveActivityFontSizeKey = "liveActivityFontSize"
+private let liveActivityFontSizeKey   = "liveActivityFontSize"
+private let liveActivityFontColorKey  = "liveActivityFontColor"
 private let proStatusKey = "isProUser"
 private let compactViewKey = "compactViewEnabled"
 
@@ -298,7 +299,23 @@ struct LockScreenLiveActivityView: View {
     private var fontSizeScale: CGFloat {
         let value = UserDefaults(suiteName: appGroupID)?
             .object(forKey: liveActivityFontSizeKey) as? Double ?? 1.0
-        return CGFloat(min(max(value, 0.7), 1.4))
+        return CGFloat(min(max(value, 0.7), 2.0))
+    }
+
+    /// 用户设置的字体颜色，从 ContentState 读取（确保与 Activity.update 同步）
+    private var customTextColor: Color {
+        switch context.state.fontColorName {
+        case "black":  return .black
+        case "yellow": return .yellow
+        case "orange": return .orange
+        case "green":  return .green
+        case "blue":   return .blue
+        case "red":    return .red
+        case "pink":   return .pink
+        case "purple": return .purple
+        case "cyan":   return .cyan
+        default:       return .white   // "white" 及兜底均为白色
+        }
     }
 
     /// 当不透明度为100%时，应强制使用与背景对比的前景色方案
@@ -314,74 +331,79 @@ struct LockScreenLiveActivityView: View {
         return active + done
     }
 
-    /// 根据字体缩放比例计算任务行字号
-    private var scaledTaskFont: Font {
+    /// 任务字号数值（任务越多字越小，强负相关；供 Font 和 NSAttributedString 复用）
+    private var scaledTaskFontSize: CGFloat {
         let base: CGFloat
         switch displayTaskCount {
-        case 0...2: base = 20
-        case 3...5: base = 17
-        case 6...8: base = 16
-        default: base = 14
+        case 0...1: base = 18
+        case 2:     base = 16
+        case 3:     base = 14
+        case 4:     base = 13
+        case 5:     base = 12
+        case 6:     base = 11
+        default:    base = 10
         }
-        return .system(size: base * fontSizeScale, weight: .medium)
+        return base * fontSizeScale
     }
 
-    private var scaledCompactFont: Font {
+    private var scaledTaskFont: Font {
+        .system(size: scaledTaskFontSize, weight: .medium)
+    }
+
+    private var scaledCompactFontSize: CGFloat {
         let base: CGFloat
         switch displayTaskCount {
         case 0...4: base = 12
         case 5...6: base = 11
-        case 7...8: base = 10
-        default: base = 10
+        default:    base = 10
         }
-        return .system(size: base * fontSizeScale, weight: .medium)
+        return base * fontSizeScale
+    }
+
+    private var scaledCompactFont: Font {
+        .system(size: scaledCompactFontSize, weight: .medium)
     }
     
-    /// 根据任务数量计算头部字号
+    /// 根据任务数量计算头部字号（锁屏空间有限，保持紧凑）
     private var headerIconSize: CGFloat {
         switch displayTaskCount {
-        case 0...2: return 22
-        case 3...5: return 20
-        case 6...8: return 18
-        default: return 16
+        case 0...2: return 15
+        case 3...5: return 13
+        default: return 12
         }
     }
-    
+
     private var headerFont: Font {
         switch displayTaskCount {
-        case 0...2: return .title3
-        case 3...5: return .headline
-        case 6...8: return .subheadline
-        default: return .subheadline
+        case 0...2: return .footnote
+        case 3...5: return .caption
+        default: return .caption2
         }
     }
-    
+
     /// 根据任务数量计算任务字号
     private var taskIconSize: CGFloat {
         switch displayTaskCount {
-        case 0...2: return 26
-        case 3...5: return 22
-        case 6...8: return 20
-        default: return 18
+        case 0...2: return 15
+        case 3...5: return 13
+        default: return 12
         }
     }
-    
+
     private var taskFont: Font {
         switch displayTaskCount {
-        case 0...2: return .title3
-        case 3...5: return .headline
-        case 6...8: return .body
-        default: return .subheadline
+        case 0...2: return .footnote
+        case 3...5: return .caption
+        default: return .caption2
         }
     }
-    
+
     /// 任务行间距
     private var taskSpacing: CGFloat {
         switch displayTaskCount {
-        case 0...2: return 12
-        case 3...5: return 10
-        case 6...8: return 8
-        default: return 6
+        case 0...2: return 7
+        case 3...5: return 5
+        default: return 3
         }
     }
     
@@ -431,31 +453,35 @@ struct LockScreenLiveActivityView: View {
             motivationCardBody
         } else {
         // 整体容器 - 始终使用最大尺寸
-        VStack(alignment: .leading, spacing: displayTaskCount <= 3 ? 14 : (displayTaskCount <= 6 ? 10 : 8)) {
-            // 头部：左边emoji+标题，右边进度
+        VStack(alignment: .leading, spacing: 0) {
+            // 头部：钉死在卡片顶部
             HStack(alignment: .center) {
                 // 左上：emoji + 分组标题
                 HStack(spacing: 6) {
                     Text(context.state.groupIcon)
                         .font(.system(size: headerIconSize))
-                    
+
                     Text(context.state.groupTitle)
                         .font(headerFont)
                         .fontWeight(.semibold)
+                        .foregroundStyle(customTextColor)
                         .lineLimit(1)
                 }
-                
+
                 Spacer()
-                
+
                 // 右上：进度数字
                 Text(headerStatusText)
                     .font(headerFont)
                     .fontWeight(.medium)
-                    .foregroundStyle(isAllCompleted ? .green : .secondary)
+                    .foregroundStyle(isAllCompleted ? .green : customTextColor.opacity(0.6))
                     .monospacedDigit()
             }
             .padding(.horizontal, 4)
-            
+
+            // 任务列表在 header 下方垂直居中
+            Spacer(minLength: 4)
+
             // 任务列表（最多显示用户设置的条数，已完成任务保留显示并划线）
             if !allDisplayTasks.isEmpty {
                 if isCompactView {
@@ -470,7 +496,8 @@ struct LockScreenLiveActivityView: View {
                                 task: tasks[index],
                                 groupID: context.attributes.groupID,
                                 iconSize: compactIconSize,
-                                font: scaledCompactFont
+                                font: scaledCompactFont,
+                                textColor: customTextColor
                             )
                             .frame(maxWidth: .infinity)
                         }
@@ -484,9 +511,10 @@ struct LockScreenLiveActivityView: View {
                                 task: task,
                                 groupID: context.attributes.groupID,
                                 iconSize: taskIconSize,
-                                font: scaledTaskFont
+                                font: scaledTaskFont,
+                                textColor: customTextColor
                             )
-                            .padding(.horizontal, 4)
+                            .padding(.horizontal, 2)
                         }
                     }
                 }
@@ -504,15 +532,14 @@ struct LockScreenLiveActivityView: View {
                 .padding(.horizontal, 4)
             }
             
-            // 填充剩余空间，确保始终使用最大尺寸
-            if displayTaskCount < maxDisplayCount {
-                Spacer(minLength: 0)
-            }
+            // 始终填充剩余空间，保证卡片占满锁屏最大高度
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(glassBackground)
-        .environment(\.colorScheme, forcedColorScheme ?? .dark)
+        .environment(\.colorScheme, forcedColorScheme ?? (isDarkAppearance ? .dark : .light))
         .activityBackgroundTint(.clear)
         .activitySystemActionForegroundColor(forcedColorScheme == .light ? Color.black : Color.white)
         }
@@ -632,22 +659,23 @@ struct TaskRowView: View {
     let groupID: String
     var iconSize: CGFloat = 18
     var font: Font = .subheadline
-    
+    var textColor: Color = .white
+
     var body: some View {
         if task.taskType == .reminder {
             HStack(spacing: 10) {
                 Image(systemName: "bell.fill")
                     .font(.system(size: iconSize, weight: .medium))
                     .foregroundStyle(.orange)
-                
+
                 Text(task.title)
                     .font(font)
                     .fontWeight(.medium)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(textColor)
                     .lineLimit(1)
-                
+
                 Spacer(minLength: 0)
-                
+
                 if let dateStr = task.formattedDueDate {
                     Text(dateStr)
                         .font(.caption2)
@@ -662,17 +690,17 @@ struct TaskRowView: View {
                 HStack(spacing: 10) {
                     Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: iconSize, weight: .medium))
-                        .foregroundStyle(task.isCompleted ? .green : .gray)
-                    
+                        .foregroundStyle(task.isCompleted ? .green : .secondary)
+
                     Text(task.title)
                         .font(font)
                         .fontWeight(.medium)
-                        .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                        .strikethrough(task.isCompleted, color: .secondary)
+                        .foregroundStyle(task.isCompleted ? textColor.opacity(0.4) : textColor)
+                        .strikethrough(task.isCompleted, color: textColor.opacity(0.45))
                         .lineLimit(1)
-                    
+
                     Spacer(minLength: 0)
-                    
+
                     if let dateStr = task.formattedDueDate {
                         Text(dateStr)
                             .font(.caption2)

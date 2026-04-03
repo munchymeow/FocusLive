@@ -14,6 +14,7 @@ struct LiveActivitySettingsView: View {
     private static let displayCountKey = "liveActivityMaxCount"
     private static let opacityKey = "liveActivityBackgroundOpacity"
     private static let fontSizeKey = "liveActivityFontSize"
+    private static let fontColorKey  = "liveActivityFontColor"
     private static let proStatusKey = "isProUser"
     private static let allowedGroupIDsKey = "liveActivityAllowedGroupIDs"
     private static let smartReminderKey = "smartReminderEnabled"
@@ -24,10 +25,14 @@ struct LiveActivitySettingsView: View {
     @AppStorage(Self.opacityKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var backgroundOpacity: Double = 0.0
 
-    /// 字体大小缩放比例 (0.8 ~ 1.4，默认 1.0)
+    /// 字体大小缩放比例 (0.7 ~ 2.0，默认 1.0)
     @AppStorage(Self.fontSizeKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var fontSizeScale: Double = 1.0
-    
+
+    /// 字体颜色名称（white/black/yellow/orange/green/blue/red/pink/purple/cyan/default）
+    @AppStorage(Self.fontColorKey, store: UserDefaults(suiteName: Self.appGroupID))
+    private var fontColorName: String = "white"
+
     @AppStorage(Self.proStatusKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var isProUser: Bool = false
     
@@ -43,6 +48,28 @@ struct LiveActivitySettingsView: View {
     
     private var maxDisplayCount: Int {
         isProUser ? 8 : 3
+    }
+
+    /// 字体颜色选项列表（name, SwiftUI Color, 展示标签）
+    private var colorOptions: [(name: String, color: Color, label: String)] {
+        [
+            ("default", Color(.systemGray5), "默认"),
+            ("white",   .white,              "白"),
+            ("black",   .black,              "黑"),
+            ("yellow",  .yellow,             "黄"),
+            ("orange",  .orange,             "橙"),
+            ("green",   .green,              "绿"),
+            ("blue",    .blue,               "蓝"),
+            ("red",     .red,                "红"),
+            ("pink",    .pink,               "粉"),
+            ("purple",  .purple,             "紫"),
+            ("cyan",    .cyan,               "青"),
+        ]
+    }
+
+    /// 当前选中颜色的展示名
+    private var fontColorDisplayName: String {
+        colorOptions.first { $0.name == fontColorName }?.label ?? "默认"
     }
 
     private var selectableGroups: [TaskGroup] {
@@ -84,6 +111,17 @@ struct LiveActivitySettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                if displayCount > 4 {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                        Text("建议显示 4 条以内，条数过多可能导致锁屏卡片内容被遮挡裁剪。")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                }
                 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -116,7 +154,7 @@ struct LiveActivitySettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Slider(value: $fontSizeScale, in: 0.7...1.4, step: 0.05) {
+                    Slider(value: $fontSizeScale, in: 0.7...2.0, step: 0.05) {
                         Text("字体大小")
                     } minimumValueLabel: {
                         Text("小")
@@ -127,6 +165,48 @@ struct LiveActivitySettingsView: View {
                     }
                 }
                 .onChange(of: fontSizeScale) { _, _ in
+                    syncLiveActivities()
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("任务字体颜色")
+                        Spacer()
+                        Text(fontColorDisplayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(colorOptions, id: \.name) { option in
+                                Button {
+                                    fontColorName = option.name
+                                    syncLiveActivities()
+                                } label: {
+                                    ZStack {
+                                        Circle()
+                                            .fill(option.color)
+                                            .frame(width: 32, height: 32)
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.accentColor, lineWidth: fontColorName == option.name ? 3 : 0)
+                                            )
+                                            .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
+                                        if option.name == "default" {
+                                            Text("A")
+                                                .font(.system(size: 14, weight: .bold))
+                                                .foregroundStyle(.primary)
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                .onChange(of: fontColorName) { _, _ in
                     syncLiveActivities()
                 }
             } header: {
@@ -146,6 +226,7 @@ struct LiveActivitySettingsView: View {
                             }
                             syncLiveActivities()
                         }
+
                 } header: {
                     Text("高级功能")
                 } footer: {
