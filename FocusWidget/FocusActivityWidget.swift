@@ -16,6 +16,7 @@ private let liveActivityDisplayCountKey = "liveActivityMaxCount"
 private let liveActivityOpacityKey = "liveActivityBackgroundOpacity"
 private let liveActivityFontSizeKey   = "liveActivityFontSize"
 private let liveActivityFontColorKey  = "liveActivityFontColor"
+private let showCompletedTasksKey = "liveActivityShowCompletedTasks"
 private let proStatusKey = "isProUser"
 private let compactViewKey = "compactViewEnabled"
 
@@ -30,8 +31,7 @@ struct FocusActivityWidget: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     HStack(spacing: 6) {
-                        Image(systemName: context.state.groupIcon)
-                            .foregroundStyle(.blue)
+                        Text(context.state.groupIcon)
                         Text(context.state.groupTitle)
                             .font(.headline)
                             .lineLimit(1)
@@ -142,6 +142,7 @@ struct FocusActivityWidget: Widget {
 // MARK: - 锁屏 Live Activity 视图
 struct LockScreenLiveActivityView: View {
     let context: ActivityViewContext<FocusAttributes>
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
     
     /// 是否为每日鼓励卡片
     private var isMotivationActivity: Bool {
@@ -223,7 +224,7 @@ struct LockScreenLiveActivityView: View {
     /// 是否启用紧凑视图
     private var isCompactView: Bool {
         let userSetting = UserDefaults(suiteName: appGroupID)?.bool(forKey: compactViewKey) ?? false
-        let taskCount = context.state.incompleteTasks.count
+        let taskCount = allDisplayTasks.count
         // 超过4个任务时自动启用紧凑模式
         return userSetting || taskCount > 4
     }
@@ -243,7 +244,11 @@ struct LockScreenLiveActivityView: View {
         let storedValue = UserDefaults(suiteName: appGroupID)?
             .object(forKey: liveActivityOpacityKey) as? NSNumber
         let value = storedValue?.doubleValue ?? 0.0
-        return min(max(value, 0.0), 1.0)
+        return value >= 0.5 ? 1.0 : 0.0
+    }
+
+    private var isOpaqueBackground: Bool {
+        backgroundOpacity >= 1.0
     }
 
     /// 当前是否为深色外观（读取系统外观设置）
@@ -254,37 +259,33 @@ struct LockScreenLiveActivityView: View {
         return false
     }
 
+    /// 锁屏默认标题颜色：半透明锁屏卡片统一使用白色，纯色背景再按明暗对比
+    private var headerTextColor: Color {
+        if isOpaqueBackground {
+            return isDarkAppearance ? .white : .black
+        }
+        return isLuminanceReduced ? .white : (isDarkAppearance ? .white : .black)
+    }
+
+    /// 锁屏自动任务文字颜色：默认白色，纯色背景再按明暗对比
+    private var adaptiveTaskTextColor: Color {
+        if isOpaqueBackground {
+            return isDarkAppearance ? .white : .black
+        }
+        return isLuminanceReduced ? .white : (isDarkAppearance ? .white : .black)
+    }
+
     /// 锁屏卡片基础色：浅色白、深色黑
     private var baseCardColor: Color {
         isDarkAppearance ? Color.black : Color.white
     }
 
-    /// 锁屏卡片玻璃背景（0 时完全透明，100 时接近基准色）
+    /// 锁屏卡片背景：仅保留透明 / 不透明两种模式
     @ViewBuilder
     private var glassBackground: some View {
-        if backgroundOpacity >= 1.0 {
+        if isOpaqueBackground {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(baseCardColor)
-        } else if backgroundOpacity > 0.001 {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(baseCardColor.opacity(backgroundOpacity))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .opacity((1.0 - backgroundOpacity) * 0.55)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white.opacity(isDarkAppearance ? 0.06 * backgroundOpacity : 0.12 * backgroundOpacity))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(
-                            (isDarkAppearance ? Color.white : Color.black)
-                                .opacity(isDarkAppearance ? 0.22 * backgroundOpacity : 0.10 * backgroundOpacity),
-                            lineWidth: 1
-                        )
-                )
         } else {
             Color.clear
         }
@@ -298,7 +299,7 @@ struct LockScreenLiveActivityView: View {
     /// 用户设置的字体大小缩放比例（0.7 ~ 1.4，默认 1.0）
     private var fontSizeScale: CGFloat {
         let value = UserDefaults(suiteName: appGroupID)?
-            .object(forKey: liveActivityFontSizeKey) as? Double ?? 1.0
+            .object(forKey: liveActivityFontSizeKey) as? Double ?? 1.5
         return CGFloat(min(max(value, 0.7), 2.0))
     }
 
@@ -314,20 +315,27 @@ struct LockScreenLiveActivityView: View {
         case "pink":   return .pink
         case "purple": return .purple
         case "cyan":   return .cyan
-        default:       return .white   // "white" 及兜底均为白色
+        default:       return adaptiveTaskTextColor
         }
+    }
+
+    /// 是否显示已完成事项（使用划线保留）
+    private var showCompletedTasks: Bool {
+        UserDefaults(suiteName: appGroupID)?.object(forKey: showCompletedTasksKey) as? Bool ?? true
     }
 
     /// 当不透明度为100%时，应强制使用与背景对比的前景色方案
     private var forcedColorScheme: ColorScheme? {
-        guard backgroundOpacity >= 1.0 else { return nil }
+        guard isOpaqueBackground else {
+            return isLuminanceReduced ? .dark : (isDarkAppearance ? .dark : .light)
+        }
         return isDarkAppearance ? .dark : .light
     }
 
     /// 锁屏显示任务列表：未完成/提醒事项在前，已完成待办附在后（划线保留）
     private var allDisplayTasks: [TaskItemSnapshot] {
         let active = context.state.incompleteTasks   // 未完成 + 提醒
-        let done = context.state.todoTasks.filter { $0.isCompleted }
+        let done = showCompletedTasks ? context.state.todoTasks.filter { $0.isCompleted } : []
         return active + done
     }
 
@@ -362,6 +370,10 @@ struct LockScreenLiveActivityView: View {
 
     private var scaledCompactFont: Font {
         .system(size: scaledCompactFontSize, weight: .medium)
+    }
+
+    private var scaledHeaderFontSize: CGFloat {
+        scaledTaskFontSize
     }
     
     /// 根据任务数量计算头部字号（锁屏空间有限，保持紧凑）
@@ -462,9 +474,9 @@ struct LockScreenLiveActivityView: View {
                         .font(.system(size: headerIconSize))
 
                     Text(context.state.groupTitle)
-                        .font(headerFont)
+                        .font(.system(size: scaledHeaderFontSize, weight: .semibold))
                         .fontWeight(.semibold)
-                        .foregroundStyle(customTextColor)
+                        .foregroundStyle(headerTextColor)
                         .lineLimit(1)
                 }
 
@@ -472,9 +484,9 @@ struct LockScreenLiveActivityView: View {
 
                 // 右上：进度数字
                 Text(headerStatusText)
-                    .font(headerFont)
+                    .font(.system(size: scaledHeaderFontSize, weight: .medium))
                     .fontWeight(.medium)
-                    .foregroundStyle(isAllCompleted ? .green : customTextColor.opacity(0.6))
+                    .foregroundStyle(isAllCompleted ? .green : headerTextColor.opacity(0.6))
                     .monospacedDigit()
             }
             .padding(.horizontal, 4)
@@ -661,6 +673,18 @@ struct TaskRowView: View {
     var font: Font = .subheadline
     var textColor: Color = .white
 
+    private var completedTextColor: Color {
+        textColor.opacity(0.58)
+    }
+
+    private var strikeColor: Color {
+        textColor.opacity(0.78)
+    }
+
+    private var strikeHeight: CGFloat {
+        max(1.4, iconSize * 0.10)
+    }
+
     var body: some View {
         if task.taskType == .reminder {
             HStack(spacing: 10) {
@@ -692,12 +716,7 @@ struct TaskRowView: View {
                         .font(.system(size: iconSize, weight: .medium))
                         .foregroundStyle(task.isCompleted ? .green : .secondary)
 
-                    Text(task.title)
-                        .font(font)
-                        .fontWeight(.medium)
-                        .foregroundStyle(task.isCompleted ? textColor.opacity(0.4) : textColor)
-                        .strikethrough(task.isCompleted, color: textColor.opacity(0.45))
-                        .lineLimit(1)
+                    taskTitleView
 
                     Spacer(minLength: 0)
 
@@ -712,6 +731,23 @@ struct TaskRowView: View {
             }
             .buttonStyle(.plain)
         }
+    }
+
+    @ViewBuilder
+    private var taskTitleView: some View {
+        Text(task.title)
+            .font(font)
+            .fontWeight(.medium)
+            .foregroundStyle(task.isCompleted ? completedTextColor : textColor)
+            .lineLimit(1)
+            .overlay {
+                if task.isCompleted {
+                    Rectangle()
+                        .fill(strikeColor)
+                        .frame(height: strikeHeight)
+                        .offset(y: 1)
+                }
+            }
     }
 }
 

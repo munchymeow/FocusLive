@@ -15,6 +15,7 @@ struct LiveActivitySettingsView: View {
     private static let opacityKey = "liveActivityBackgroundOpacity"
     private static let fontSizeKey = "liveActivityFontSize"
     private static let fontColorKey  = "liveActivityFontColor"
+    private static let showCompletedTasksKey = "liveActivityShowCompletedTasks"
     private static let proStatusKey = "isProUser"
     private static let allowedGroupIDsKey = "liveActivityAllowedGroupIDs"
     private static let smartReminderKey = "smartReminderEnabled"
@@ -27,11 +28,14 @@ struct LiveActivitySettingsView: View {
 
     /// 字体大小缩放比例 (0.7 ~ 2.0，默认 1.0)
     @AppStorage(Self.fontSizeKey, store: UserDefaults(suiteName: Self.appGroupID))
-    private var fontSizeScale: Double = 1.0
+    private var fontSizeScale: Double = 1.5
 
     /// 字体颜色名称（white/black/yellow/orange/green/blue/red/pink/purple/cyan/default）
     @AppStorage(Self.fontColorKey, store: UserDefaults(suiteName: Self.appGroupID))
-    private var fontColorName: String = "white"
+    private var fontColorName: String = "default"
+
+    @AppStorage(Self.showCompletedTasksKey, store: UserDefaults(suiteName: Self.appGroupID))
+    private var showCompletedTasks: Bool = true
 
     @AppStorage(Self.proStatusKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var isProUser: Bool = false
@@ -45,9 +49,38 @@ struct LiveActivitySettingsView: View {
     
     @Query private var taskGroups: [TaskGroup]
     @State private var selectedGroupIDs: Set<String> = []
+
+    private enum LockScreenBackgroundMode: String, CaseIterable, Identifiable {
+        case transparent
+        case opaque
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .transparent: return "透明"
+            case .opaque: return "不透明"
+            }
+        }
+    }
     
     private var maxDisplayCount: Int {
         isProUser ? 8 : 3
+    }
+
+    private var backgroundMode: LockScreenBackgroundMode {
+        get { backgroundOpacity >= 0.5 ? .opaque : .transparent }
+        nonmutating set { backgroundOpacity = newValue == .opaque ? 1.0 : 0.0 }
+    }
+
+    private var backgroundModeBinding: Binding<LockScreenBackgroundMode> {
+        Binding(
+            get: { backgroundMode },
+            set: {
+                backgroundMode = $0
+                syncLiveActivities()
+            }
+        )
     }
 
     /// 字体颜色选项列表（name, SwiftUI Color, 展示标签）
@@ -124,23 +157,16 @@ struct LiveActivitySettingsView: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("背景不透明度")
-                        Spacer()
-                        Text(String(format: String(localized: "不透明度：%lld%%"), Int64(backgroundOpacity * 100)))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("卡片背景")
 
-                    Slider(value: $backgroundOpacity, in: 0.0...1.0, step: 0.1) {
-                        Text("背景不透明度")
-                    } minimumValueLabel: {
-                        Text("0%")
-                    } maximumValueLabel: {
-                        Text("100%")
+                    Picker("卡片背景", selection: backgroundModeBinding) {
+                        ForEach(LockScreenBackgroundMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
                     }
+                    .pickerStyle(.segmented)
 
-                    Text("0% 完全透明（无背景），100% 为不透明纯色背景。")
+                    Text("透明模式默认白字；不透明模式会根据浅色白底黑字、深色黑底白字自动切换。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -209,10 +235,15 @@ struct LiveActivitySettingsView: View {
                 .onChange(of: fontColorName) { _, _ in
                     syncLiveActivities()
                 }
+
+                Toggle("显示已完成事项", isOn: $showCompletedTasks)
+                    .onChange(of: showCompletedTasks) { _, _ in
+                        syncLiveActivities()
+                    }
             } header: {
                 Text("锁屏实时活动")
             } footer: {
-                Text("设置会同步到锁屏实时活动与灵动岛展示。")
+                Text("设置会同步到锁屏实时活动与灵动岛展示。关闭“显示已完成事项”后，锁屏卡片只展示未完成事项和提醒。透明模式适合直接贴合锁屏，不透明模式适合稳定对比度。")
             }
             
             if isProUser {
@@ -241,7 +272,7 @@ struct LiveActivitySettingsView: View {
                     }
                     
                     if dailyMotivationEnabled {
-                        Text("当没有设置锁屏显示分组时，每天随机显示一条励志名言")
+                        Text("开启后，每日鼓励会显示在首页“全部”页底部，并同步到锁屏每日鼓励卡片。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -282,12 +313,7 @@ struct LiveActivitySettingsView: View {
         if displayCount > maxDisplayCount {
             displayCount = maxDisplayCount
         }
-        if backgroundOpacity < 0.0 {
-            backgroundOpacity = 0.0
-        }
-        if backgroundOpacity > 1.0 {
-            backgroundOpacity = 1.0
-        }
+        backgroundOpacity = backgroundOpacity >= 0.5 ? 1.0 : 0.0
     }
 
     /// 获取分组选择绑定

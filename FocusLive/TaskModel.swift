@@ -104,10 +104,10 @@ final class TaskItem {
         dueDate: Date? = nil,
         sortOrder: Int? = 0,
         scheduledTime: Date? = nil,
-        repeatType: RepeatType? = .none,
+        repeatType: RepeatType? = RepeatType.none,
         repeatInterval: Int? = 1,
         reminderTime: Date? = nil,
-        reminderType: ReminderType? = .none,
+        reminderType: ReminderType? = ReminderType.none,
         priority: Priority? = .medium,
         attachments: [Attachment]? = nil
     ) {
@@ -170,7 +170,7 @@ final class TaskGroup {
         tasks: [TaskItem] = [],
         scheduledTime: Date? = nil,
         reminderTime: Date? = nil,
-        reminderType: ReminderType? = .none,
+        reminderType: ReminderType? = ReminderType.none,
         priority: Priority? = .medium
     ) {
         self.id = id
@@ -331,5 +331,23 @@ struct TaskItemSnapshot: Codable, Hashable {
         let formatter = DateFormatter()
         formatter.dateFormat = "M/d HH:mm"
         return formatter.string(from: date)
+    }
+
+    /// 保留现有元数据，仅更新完成状态
+    func updatingCompletion(_ isCompleted: Bool) -> TaskItemSnapshot {
+        TaskItemSnapshot(
+            id: id,
+            title: title,
+            isCompleted: isCompleted,
+            taskType: taskType,
+            dueDate: dueDate,
+            scheduledTime: scheduledTime,
+            repeatType: repeatType,
+            repeatInterval: repeatInterval,
+            reminderTime: reminderTime,
+            reminderType: reminderType,
+            priority: priority,
+            attachments: attachments
+        )
     }
 }

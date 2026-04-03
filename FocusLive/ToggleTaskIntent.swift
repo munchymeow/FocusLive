@@ -97,14 +97,8 @@ struct ToggleTaskIntent: LiveActivityIntent {
         print("      原状态: \(currentTask.isCompleted)")
         print("      新状态: \(newCompletedStatus)")
         
-        // 创建新的任务快照（保留 dueDate）
-        updatedTasks[index] = TaskItemSnapshot(
-            id: currentTask.id,
-            title: currentTask.title,
-            isCompleted: newCompletedStatus,
-            taskType: currentTask.taskType,
-            dueDate: currentTask.dueDate
-        )
+        // 保留现有样式与元数据，仅切换完成状态
+        updatedTasks[index] = currentTask.updatingCompletion(newCompletedStatus)
         
         print("   ✅ 任务 '\(currentTask.title)' 状态切换为: \(newCompletedStatus)")
         
@@ -113,7 +107,8 @@ struct ToggleTaskIntent: LiveActivityIntent {
             groupTitle: activity.content.state.groupTitle,
             groupIcon: activity.content.state.groupIcon,
             tasks: updatedTasks,
-            renderVersion: Date().timeIntervalSince1970
+            renderVersion: Date().timeIntervalSince1970,
+            fontColorName: activity.content.state.fontColorName
         )
         
         print("   📤 准备更新 Live Activity...")

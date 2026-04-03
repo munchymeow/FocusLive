@@ -20,6 +20,9 @@ private let dailyMotivationEnabledKey = "dailyMotivationEnabled"
 private let lastMotivationDateKey = "lastMotivationDate"
 private let currentMotivationQuoteKey = "currentMotivationQuote"
 private let currentMotivationAuthorKey = "currentMotivationAuthor"
+private let useCustomMotivationQuoteKey = "useCustomMotivationQuote"
+private let customMotivationQuoteKey = "customMotivationQuote"
+private let customMotivationAuthorKey = "customMotivationAuthor"
 private let widgetDisplaySnapshotKey = "widgetDisplaySnapshot"
 
 /// 待同步的任务变更记录
@@ -277,7 +280,8 @@ final class ActivityManager {
                     isCompleted: false
                 )
             ],
-            renderVersion: Date().timeIntervalSince1970
+            renderVersion: Date().timeIntervalSince1970,
+            fontColorName: currentFontColorName()
         )
         
         do {
@@ -379,13 +383,7 @@ final class ActivityManager {
         
         var updatedTasks = activity.content.state.tasks
         if let index = updatedTasks.firstIndex(where: { $0.id == taskID }) {
-            updatedTasks[index] = TaskItemSnapshot(
-                id: updatedTasks[index].id,
-                title: updatedTasks[index].title,
-                isCompleted: isCompleted,
-                taskType: updatedTasks[index].taskType,
-                dueDate: updatedTasks[index].dueDate
-            )
+            updatedTasks[index] = updatedTasks[index].updatingCompletion(isCompleted)
             
             let newState = FocusAttributes.ContentState(
                 groupTitle: activity.content.state.groupTitle,
@@ -461,7 +459,7 @@ final class ActivityManager {
 
     /// 获取当前字体颜色名称
     private func currentFontColorName() -> String {
-        UserDefaults(suiteName: appGroupID)?.string(forKey: "liveActivityFontColor") ?? "white"
+        UserDefaults(suiteName: appGroupID)?.string(forKey: "liveActivityFontColor") ?? "default"
     }
     
     /// 获取智能提醒开关状态
@@ -500,7 +498,8 @@ final class ActivityManager {
                     isCompleted: false
                 )
             ],
-            renderVersion: Date().timeIntervalSince1970
+            renderVersion: Date().timeIntervalSince1970,
+            fontColorName: currentFontColorName()
         )
         
         do {
@@ -610,8 +609,7 @@ final class ActivityManager {
         guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
         
         let isEnabled = defaults.object(forKey: dailyMotivationEnabledKey) as? Bool ?? true
-        let storedSelection = defaults.array(forKey: allowedGroupIDsKey) as? [String]
-        let shouldShowMotivation = isEnabled && (storedSelection?.isEmpty == true)
+        let shouldShowMotivation = isEnabled
         
         guard shouldShowMotivation else {
             endMotivationActivity()
@@ -620,6 +618,17 @@ final class ActivityManager {
         
         let motivationActivities = Activity<FocusAttributes>.activities.filter {
             $0.attributes.groupID.hasPrefix("motivation_")
+        }
+
+        if let custom = storedCustomMotivation(defaults: defaults) {
+            defaults.set(custom.quote, forKey: currentMotivationQuoteKey)
+            if let author = custom.author {
+                defaults.set(author, forKey: currentMotivationAuthorKey)
+            } else {
+                defaults.removeObject(forKey: currentMotivationAuthorKey)
+            }
+            syncMotivationActivities(motivationActivities, quote: custom.quote, author: custom.author)
+            return
         }
         
         // 检查是否需要更新名言（每天更换）
@@ -648,6 +657,34 @@ final class ActivityManager {
         }
         createRandomMotivationActivity(defaults: defaults, for: today)
     }
+
+    func refreshMotivationActivityFromStoredContentIfNeeded() {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
+
+        let isEnabled = defaults.object(forKey: dailyMotivationEnabledKey) as? Bool ?? true
+        let shouldShowMotivation = isEnabled
+
+        guard shouldShowMotivation else { return }
+
+        let quote: String
+        let author: String?
+
+        if let custom = storedCustomMotivation(defaults: defaults) {
+            quote = custom.quote
+            author = custom.author
+        } else {
+            let storedQuote = defaults.string(forKey: currentMotivationQuoteKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !storedQuote.isEmpty else { return }
+            quote = storedQuote
+            let storedAuthor = defaults.string(forKey: currentMotivationAuthorKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            author = storedAuthor.isEmpty ? nil : storedAuthor
+        }
+
+        let motivationActivities = Activity<FocusAttributes>.activities.filter {
+            $0.attributes.groupID.hasPrefix("motivation_")
+        }
+        syncMotivationActivities(motivationActivities, quote: quote, author: author)
+    }
     
     /// 随机选择一句名言并创建活动，同时持久化当天内容
     private func createRandomMotivationActivity(defaults: UserDefaults, for dayStart: Date) {
@@ -662,6 +699,40 @@ final class ActivityManager {
         defaults.set(dayStart, forKey: lastMotivationDateKey)
         
         createMotivationActivity(quote: selected.quote, author: selected.author)
+    }
+
+    private func syncMotivationActivities(
+        _ activities: [Activity<FocusAttributes>],
+        quote: String,
+        author: String?
+    ) {
+        guard !quote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        if activities.isEmpty {
+            createMotivationActivity(quote: quote, author: author)
+            return
+        }
+
+        let fullText = quote + ((author?.isEmpty == false) ? "\n——\(author!)" : "")
+        let newState = FocusAttributes.ContentState(
+            groupTitle: "每日鼓励",
+            groupIcon: "💡",
+            tasks: [
+                TaskItemSnapshot(
+                    id: "quote",
+                    title: fullText,
+                    isCompleted: false
+                )
+            ],
+            renderVersion: Date().timeIntervalSince1970,
+            fontColorName: currentFontColorName()
+        )
+
+        for activity in activities {
+            Task {
+                await updateActivityAsync(activity: activity, newState: newState)
+            }
+        }
     }
     
     /// 从 CSV 中随机获取一句名言
@@ -693,6 +764,17 @@ final class ActivityManager {
         
         return (quote, author.isEmpty ? nil : author)
     }
+
+    private func storedCustomMotivation(defaults: UserDefaults) -> (quote: String, author: String?)? {
+        let isCustomEnabled = defaults.object(forKey: useCustomMotivationQuoteKey) as? Bool ?? false
+        guard isCustomEnabled else { return nil }
+
+        let quote = defaults.string(forKey: customMotivationQuoteKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !quote.isEmpty else { return nil }
+
+        let author = defaults.string(forKey: customMotivationAuthorKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return (quote, author.isEmpty ? nil : author)
+    }
     
     /// 清洗名言文本（去掉包裹引号）
     private func cleanedQuote(_ raw: String) -> String {
@@ -719,7 +801,8 @@ final class ActivityManager {
                 groupTitle: group.title,
                 groupIcon: group.iconName,
                 tasks: publicTasks(for: group).map { TaskItemSnapshot(from: $0) },
-                renderVersion: Date().timeIntervalSince1970
+                renderVersion: Date().timeIntervalSince1970,
+                fontColorName: currentFontColorName()
             )
             persistWidgetSnapshot(state: state, defaults: defaults)
             return
@@ -732,9 +815,8 @@ final class ActivityManager {
             return
         }
 
-        let selectedGroups = defaults.array(forKey: allowedGroupIDsKey) as? [String]
         let isMotivationEnabled = defaults.object(forKey: dailyMotivationEnabledKey) as? Bool ?? true
-        let shouldShowMotivation = isMotivationEnabled && (selectedGroups?.isEmpty == true)
+        let shouldShowMotivation = isMotivationEnabled
 
         if shouldShowMotivation {
             let quote = defaults.string(forKey: currentMotivationQuoteKey) ?? "愿你今天也保持专注。"

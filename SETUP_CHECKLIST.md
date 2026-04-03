@@ -164,13 +164,12 @@ struct ToggleTaskIntent: LiveActivityIntent {
    - 不要使用模拟器（Live Activities 显示不完整）
 
 3. **启动 App**
-   - 点击 "添加示例数据" 按钮
+   - 首次启动先完成 "新手教程"
+   - 点击右上角 `+` 创建一个分组并添加任务
    - 观察控制台日志：
      ```
      🔄 同步 Live Activities...
-     ✅ 为分组 '工作' 创建新 Activity
-     ✅ 为分组 '晚自修' 创建新 Activity
-     ✅ 为分组 '生活' 创建新 Activity
+     ✅ 为分组 'xxx' 创建新 Activity
      ```
 
 4. **锁定屏幕**

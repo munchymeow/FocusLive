@@ -90,10 +90,10 @@ struct ToggleTaskIntent: LiveActivityIntent {
 
 ### 🚀 第一次运行
 
-1. 打开 App，点击"添加示例数据"按钮
-2. 系统自动创建 3 个分组："工作"、"晚自修"、"生活"
+1. 打开 App，首次启动会自动弹出新手教程
+2. 点击右上角 `+` 创建第一个分组，可选择传统待办、每日打卡或提醒事项
 3. **自动触发**：App 在 `onAppear` 时调用 `syncActivities`
-4. 锁屏上立即出现 3 个 Live Activity 卡片
+4. 有未完成事项的分组会自动出现在锁屏 Live Activity 中
 
 ### 📱 日常使用
 
