@@ -16,6 +16,7 @@ struct LiveActivitySettingsView: View {
     private static let fontSizeKey = "liveActivityFontSize"
     private static let fontColorKey  = "liveActivityFontColor"
     private static let showCompletedTasksKey = "liveActivityShowCompletedTasks"
+    private static let dynamicIslandEnabledKey = "liveActivityDynamicIslandEnabled"
     private static let proStatusKey = "isProUser"
     private static let allowedGroupIDsKey = "liveActivityAllowedGroupIDs"
     private static let smartReminderKey = "smartReminderEnabled"
@@ -36,6 +37,9 @@ struct LiveActivitySettingsView: View {
 
     @AppStorage(Self.showCompletedTasksKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var showCompletedTasks: Bool = true
+
+    @AppStorage(Self.dynamicIslandEnabledKey, store: UserDefaults(suiteName: Self.appGroupID))
+    private var dynamicIslandEnabled: Bool = false
 
     @AppStorage(Self.proStatusKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var isProUser: Bool = false
@@ -236,6 +240,11 @@ struct LiveActivitySettingsView: View {
                     syncLiveActivities()
                 }
 
+                Toggle("显示灵动岛", isOn: $dynamicIslandEnabled)
+                    .onChange(of: dynamicIslandEnabled) { _, _ in
+                        syncLiveActivities()
+                    }
+
                 Toggle("显示已完成事项", isOn: $showCompletedTasks)
                     .onChange(of: showCompletedTasks) { _, _ in
                         syncLiveActivities()
@@ -243,7 +252,7 @@ struct LiveActivitySettingsView: View {
             } header: {
                 Text("锁屏实时活动")
             } footer: {
-                Text("设置会同步到锁屏实时活动与灵动岛展示。关闭“显示已完成事项”后，锁屏卡片只展示未完成事项和提醒。透明模式适合直接贴合锁屏，不透明模式适合稳定对比度。")
+                Text("默认任务文字会根据卡片背景与系统深浅色自动切换黑白；手动选色会覆盖默认效果。关闭“显示灵动岛”后，锁屏卡片保持正常，灵动岛会尽量不展示内容。")
             }
             
             if isProUser {

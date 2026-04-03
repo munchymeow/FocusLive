@@ -19,119 +19,140 @@ private let liveActivityFontColorKey  = "liveActivityFontColor"
 private let showCompletedTasksKey = "liveActivityShowCompletedTasks"
 private let proStatusKey = "isProUser"
 private let compactViewKey = "compactViewEnabled"
+private let dynamicIslandEnabledKey = "liveActivityDynamicIslandEnabled"
+private let liveActivityAppearanceKey = "liveActivitySystemAppearance"
 
 /// Live Activity Widget 视图
 struct FocusActivityWidget: Widget {
+    private var isDynamicIslandEnabled: Bool {
+        UserDefaults(suiteName: appGroupID)?.object(forKey: dynamicIslandEnabledKey) as? Bool ?? false
+    }
+
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: FocusAttributes.self) { context in
             // 锁屏 Live Activity 视图
             LockScreenLiveActivityView(context: context)
         } dynamicIsland: { context in
-            // 灵动岛视图
-            DynamicIsland {
-                DynamicIslandExpandedRegion(.leading) {
-                    HStack(spacing: 6) {
-                        Text(context.state.groupIcon)
-                        Text(context.state.groupTitle)
-                            .font(.headline)
-                            .lineLimit(1)
-                    }
-                }
-                DynamicIslandExpandedRegion(.trailing) {
-                    if context.attributes.groupID.hasPrefix("motivation_") {
-                        Text("💡")
-                            .font(.headline)
-                    } else if context.state.totalCount > 0 {
-                        Text("\(context.state.completedCount)/\(context.state.totalCount)")
-                            .font(.headline.monospacedDigit())
-                    } else {
-                        Text("🔔\(context.state.reminderTasks.count)")
-                            .font(.headline.monospacedDigit())
-                    }
-                }
-                DynamicIslandExpandedRegion(.bottom) {
-                    if context.attributes.groupID.hasPrefix("motivation_"),
-                       let quoteTask = context.state.tasks.first {
-                        Text(quoteTask.title)
-                            .font(.subheadline)
-                            .lineLimit(2)
-                    } else if let firstTask = context.state.todoIncompleteTasks.first {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("下一个: \(firstTask.title)")
-                                .font(.subheadline)
-                                .lineLimit(1)
-                            
-                            Button(intent: ToggleTaskIntent(
-                                groupID: context.attributes.groupID,
-                                taskID: firstTask.id
-                            )) {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                    Text("完成")
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 8)
-                                .background(Color.green)
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    } else if let firstReminder = context.state.reminderTasks.first {
-                        HStack(spacing: 8) {
-                            Image(systemName: "bell.fill")
-                                .foregroundStyle(.orange)
-                            Text(firstReminder.title)
-                                .font(.subheadline)
-                                .lineLimit(1)
-                            Spacer()
-                        }
-                    } else {
-                        Text("✓ 全部完成！")
-                            .font(.headline)
-                            .foregroundStyle(.green)
-                    }
+            dynamicIslandContent(for: context)
+        }
+    }
+
+    private func dynamicIslandContent(for context: ActivityViewContext<FocusAttributes>) -> DynamicIsland {
+        guard isDynamicIslandEnabled else {
+            // iOS 目前不支持仅保留锁屏而彻底关闭灵动岛，这里尽量返回空内容。
+            return DynamicIsland {
+                DynamicIslandExpandedRegion(.center) {
+                    EmptyView()
                 }
             } compactLeading: {
-                // 左侧紧凑视图：显示图标
-                Text(context.state.groupIcon)
-                    .font(.system(size: 14))
+                EmptyView()
             } compactTrailing: {
+                EmptyView()
+            } minimal: {
+                EmptyView()
+            }
+        }
+
+        return DynamicIsland {
+            DynamicIslandExpandedRegion(.leading) {
+                HStack(spacing: 6) {
+                    Text(context.state.groupIcon)
+                    Text(context.state.groupTitle)
+                        .font(.headline)
+                        .lineLimit(1)
+                }
+            }
+            DynamicIslandExpandedRegion(.trailing) {
                 if context.attributes.groupID.hasPrefix("motivation_") {
                     Text("💡")
-                        .font(.caption)
+                        .font(.headline)
                 } else if context.state.totalCount > 0 {
                     Text("\(context.state.completedCount)/\(context.state.totalCount)")
-                        .font(.caption.monospacedDigit())
+                        .font(.headline.monospacedDigit())
                 } else {
                     Text("🔔\(context.state.reminderTasks.count)")
-                        .font(.caption.monospacedDigit())
+                        .font(.headline.monospacedDigit())
                 }
-            } minimal: {
-                // 最小化视图：显示剩余任务数（点击展开灵动岛）
-                // 注意：minimal 视图不支持 Button 交互，点击会展开灵动岛
-                if context.attributes.groupID.hasPrefix("motivation_") {
-                    ZStack {
-                        Circle()
-                            .fill(Color.orange)
-                        Image(systemName: "lightbulb.fill")
-                            .font(.system(size: 10, weight: .bold))
+            }
+            DynamicIslandExpandedRegion(.bottom) {
+                if context.attributes.groupID.hasPrefix("motivation_"),
+                   let quoteTask = context.state.tasks.first {
+                    Text(quoteTask.title)
+                        .font(.subheadline)
+                        .lineLimit(2)
+                } else if let firstTask = context.state.todoIncompleteTasks.first {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("下一个: \(firstTask.title)")
+                            .font(.subheadline)
+                            .lineLimit(1)
+
+                        Button(intent: ToggleTaskIntent(
+                            groupID: context.attributes.groupID,
+                            taskID: firstTask.id
+                        )) {
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                Text("完成")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(Color.green)
                             .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else if let firstReminder = context.state.reminderTasks.first {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bell.fill")
+                            .foregroundStyle(.orange)
+                        Text(firstReminder.title)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        Spacer()
                     }
                 } else {
-                    ZStack {
-                        Circle()
-                            .fill(context.state.remainingCount > 0 ? Color.blue : Color.green)
-                        
-                        if context.state.remainingCount > 0 {
-                            Text("\(context.state.remainingCount)")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.white)
-                        } else {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
+                    Text("✓ 全部完成！")
+                        .font(.headline)
+                        .foregroundStyle(.green)
+                }
+            }
+        } compactLeading: {
+            Text(context.state.groupIcon)
+                .font(.system(size: 14))
+        } compactTrailing: {
+            if context.attributes.groupID.hasPrefix("motivation_") {
+                Text("💡")
+                    .font(.caption)
+            } else if context.state.totalCount > 0 {
+                Text("\(context.state.completedCount)/\(context.state.totalCount)")
+                    .font(.caption.monospacedDigit())
+            } else {
+                Text("🔔\(context.state.reminderTasks.count)")
+                    .font(.caption.monospacedDigit())
+            }
+        } minimal: {
+            if context.attributes.groupID.hasPrefix("motivation_") {
+                ZStack {
+                    Circle()
+                        .fill(Color.orange)
+                    Image(systemName: "lightbulb.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(context.state.remainingCount > 0 ? Color.blue : Color.green)
+
+                    if context.state.remainingCount > 0 {
+                        Text("\(context.state.remainingCount)")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                    } else {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
                     }
                 }
             }
@@ -142,7 +163,7 @@ struct FocusActivityWidget: Widget {
 // MARK: - 锁屏 Live Activity 视图
 struct LockScreenLiveActivityView: View {
     let context: ActivityViewContext<FocusAttributes>
-    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+    @Environment(\.colorScheme) private var colorScheme
     
     /// 是否为每日鼓励卡片
     private var isMotivationActivity: Bool {
@@ -251,12 +272,19 @@ struct LockScreenLiveActivityView: View {
         backgroundOpacity >= 1.0
     }
 
-    /// 当前是否为深色外观（读取系统外观设置）
+    private var storedSystemAppearance: String? {
+        UserDefaults(suiteName: appGroupID)?.string(forKey: liveActivityAppearanceKey)
+    }
+
+    /// 当前是否为深色外观（直接跟随锁屏 Live Activity 的环境色彩方案）
     private var isDarkAppearance: Bool {
+        if let storedSystemAppearance {
+            return storedSystemAppearance == "dark"
+        }
         if let interfaceStyle = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") {
             return interfaceStyle == "Dark"
         }
-        return false
+        return colorScheme == .dark
     }
 
     /// 锁屏默认标题颜色：半透明锁屏卡片统一使用白色，纯色背景再按明暗对比
@@ -264,7 +292,7 @@ struct LockScreenLiveActivityView: View {
         if isOpaqueBackground {
             return isDarkAppearance ? .white : .black
         }
-        return isLuminanceReduced ? .white : (isDarkAppearance ? .white : .black)
+        return .white
     }
 
     /// 锁屏自动任务文字颜色：默认白色，纯色背景再按明暗对比
@@ -272,7 +300,7 @@ struct LockScreenLiveActivityView: View {
         if isOpaqueBackground {
             return isDarkAppearance ? .white : .black
         }
-        return isLuminanceReduced ? .white : (isDarkAppearance ? .white : .black)
+        return .white
     }
 
     /// 锁屏卡片基础色：浅色白、深色黑
@@ -306,6 +334,8 @@ struct LockScreenLiveActivityView: View {
     /// 用户设置的字体颜色，从 ContentState 读取（确保与 Activity.update 同步）
     private var customTextColor: Color {
         switch context.state.fontColorName {
+        case "default": return adaptiveTaskTextColor
+        case "white":  return .white
         case "black":  return .black
         case "yellow": return .yellow
         case "orange": return .orange
@@ -324,12 +354,9 @@ struct LockScreenLiveActivityView: View {
         UserDefaults(suiteName: appGroupID)?.object(forKey: showCompletedTasksKey) as? Bool ?? true
     }
 
-    /// 当不透明度为100%时，应强制使用与背景对比的前景色方案
-    private var forcedColorScheme: ColorScheme? {
-        guard isOpaqueBackground else {
-            return isLuminanceReduced ? .dark : (isDarkAppearance ? .dark : .light)
-        }
-        return isDarkAppearance ? .dark : .light
+    /// 透明卡片固定按深色语义渲染，不透明卡片跟随系统深浅色
+    private var contentColorScheme: ColorScheme {
+        isOpaqueBackground ? (isDarkAppearance ? .dark : .light) : .dark
     }
 
     /// 锁屏显示任务列表：未完成/提醒事项在前，已完成待办附在后（划线保留）
@@ -551,9 +578,9 @@ struct LockScreenLiveActivityView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(glassBackground)
-        .environment(\.colorScheme, forcedColorScheme ?? (isDarkAppearance ? .dark : .light))
+        .environment(\.colorScheme, contentColorScheme)
         .activityBackgroundTint(.clear)
-        .activitySystemActionForegroundColor(forcedColorScheme == .light ? Color.black : Color.white)
+        .activitySystemActionForegroundColor(contentColorScheme == .light ? Color.black : Color.white)
         }
     }
     
