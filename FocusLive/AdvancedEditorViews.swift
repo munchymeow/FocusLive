@@ -5,6 +5,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 // MARK: - Advanced Task Editor
 
@@ -26,6 +27,8 @@ struct AdvancedTaskEditor: View {
     @State private var showAddLinkSheet = false
     @State private var newLinkURL = ""
     @State private var newLinkTitle = ""
+    @State private var showClockGuideSheet = false
+    @State private var clockGuideCopied = false
 
     var body: some View {
         NavigationView {
@@ -77,6 +80,18 @@ struct AdvancedTaskEditor: View {
                         Text("提前6小时").tag(ReminderType.before6hours)
                         Text("提前1天").tag(ReminderType.before1day)
                         Text("提前1周").tag(ReminderType.before1week)
+                    }
+                }
+
+                if selectedReminderType != .none && selectedTaskType == .reminder {
+                    Section {
+                        Button {
+                            showClockGuideSheet = true
+                        } label: {
+                            Label("添加到系统时钟", systemImage: "alarm")
+                        }
+                    } footer: {
+                        Text("iOS 不允许第三方直接创建闹钟，点击可复制信息并打开系统时钟。")
                     }
                 }
                 
@@ -176,6 +191,9 @@ struct AdvancedTaskEditor: View {
                 }
                 .presentationDetents([.medium])
             }
+            .sheet(isPresented: $showClockGuideSheet) {
+                clockGuideSheet
+            }
             .onAppear {
                 selectedTaskType = task.taskType ?? .todo
                 selectedScheduledTime = task.scheduledTime ?? Date()
@@ -220,6 +238,98 @@ struct AdvancedTaskEditor: View {
         case .file: return "doc"
         case .image: return "photo"
         }
+    }
+
+    // MARK: - 系统时钟引导
+
+    private var clockGuideSheet: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                Image(systemName: "alarm")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.orange)
+                    .padding(.top, 8)
+
+                Text("iOS 不允许第三方 App 直接创建系统闹钟。\n您可以复制以下信息，手动添加到系统时钟。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "text.badge.checkmark")
+                            .foregroundStyle(.blue)
+                            .frame(width: 20)
+                        Text("标题：\(task.title)")
+                            .font(.body)
+                    }
+                    if let scheduledTime = task.scheduledTime {
+                        HStack {
+                            Image(systemName: "clock")
+                                .foregroundStyle(.blue)
+                                .frame(width: 20)
+                            Text("时间：\(formattedTime(scheduledTime))")
+                                .font(.body)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
+
+                Button {
+                    copyClockInfoToPasteboard()
+                    clockGuideCopied = true
+                } label: {
+                    Label(clockGuideCopied ? "已复制" : "复制标题与时间", systemImage: clockGuideCopied ? "checkmark" : "doc.on.doc")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(clockGuideCopied ? .green : .blue)
+                .padding(.horizontal)
+
+                Button {
+                    if let url = URL(string: "clock:") {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("打开系统时钟", systemImage: "alarm.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .padding(.horizontal)
+
+                Spacer()
+            }
+            .navigationTitle("添加到系统时钟")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("完成") {
+                        clockGuideCopied = false
+                        showClockGuideSheet = false
+                    }
+                }
+            }
+            .onDisappear { clockGuideCopied = false }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func formattedTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/M/d HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private func copyClockInfoToPasteboard() {
+        var text = task.title
+        if let scheduledTime = task.scheduledTime {
+            text += " · \(formattedTime(scheduledTime))"
+        }
+        UIPasteboard.general.string = text
     }
 }
 

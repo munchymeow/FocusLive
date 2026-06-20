@@ -169,6 +169,14 @@ final class ActivityManager {
         } else {
             NotificationManager.shared.cancelAllSmartReminders()
         }
+
+        // 调度提醒事项的准时通知（独立于智能提醒，不依赖 Pro 状态）
+        Task {
+            let granted = await NotificationManager.shared.requestPermission()
+            if granted {
+                NotificationManager.shared.rescheduleReminderNotifications(groups: groups)
+            }
+        }
         
         // 根据每日鼓励开关与分组选择同步励志名言活动
         checkAndCreateMotivationActivityIfNeeded()
