@@ -2,7 +2,8 @@
 //  BorderlessContentView.swift
 //  FocusLive
 //
-//  测试版无界首页：无卡片、无边框、大留白的极简设计
+//  测试版无界首页：Ambient Glass 设计语言
+//  三层视觉：环境光晕 + 毛玻璃内容层 + 渐变交互层
 //
 
 import SwiftUI
@@ -97,7 +98,7 @@ struct BorderlessContentView: View {
         activeFilter == .privateSpace && !isPrivacyUnlocked
     }
 
-    // MARK: - 无界设计 token
+    // MARK: - Ambient Glass 设计 token
 
     private var backgroundColor: Color {
         colorScheme == .dark
@@ -105,15 +106,37 @@ struct BorderlessContentView: View {
             : Color(red: 0.97, green: 0.97, blue: 0.99)
     }
 
+    private var glassBackground: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.04)
+            : Color.black.opacity(0.02)
+    }
+
+    private var glassBorder: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.08)
+            : Color.black.opacity(0.05)
+    }
+
+    private var glassShadow: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(0.2)
+            : Color.black.opacity(0.04)
+    }
+
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
             ZStack {
+                // 环境层：背景色
                 backgroundColor.ignoresSafeArea()
 
+                // 环境层：模糊光晕
+                ambientBlobs
+
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 20) {
                         // 标题区域
                         borderlessHeader
 
@@ -135,7 +158,7 @@ struct BorderlessContentView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, 20)
                     .padding(.top, 12)
                     .padding(.bottom, 120)
                 }
@@ -179,13 +202,59 @@ struct BorderlessContentView: View {
         }
     }
 
+    // MARK: - 环境光晕
+
+    private var ambientBlobs: some View {
+        ZStack {
+            // 光晕 1：蓝青渐变，左上偏移
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: colorScheme == .dark
+                            ? [Color.cyan.opacity(0.25), Color.blue.opacity(0.18)]
+                            : [Color.cyan.opacity(0.15), Color.blue.opacity(0.10)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 300, height: 300)
+                .blur(radius: 80)
+                .offset(x: -140, y: -220)
+
+            // 光晕 2：薄荷蓝渐变，右下偏移
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: colorScheme == .dark
+                            ? [Color.mint.opacity(0.18), Color.blue.opacity(0.12)]
+                            : [Color.mint.opacity(0.10), Color.blue.opacity(0.06)],
+                        startPoint: .topTrailing,
+                        endPoint: .bottomLeading
+                    )
+                )
+                .frame(width: 280, height: 280)
+                .blur(radius: 70)
+                .offset(x: 140, y: 260)
+
+            // 光晕 3：紫色点缀，中间偏右
+            Circle()
+                .fill(
+                    Color.purple.opacity(colorScheme == .dark ? 0.10 : 0.06)
+                )
+                .frame(width: 200, height: 200)
+                .blur(radius: 60)
+                .offset(x: 100, y: -60)
+        }
+        .allowsHitTesting(false)
+    }
+
     // MARK: - 无界标题
 
     private var borderlessHeader: some View {
         HStack(alignment: .lastTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(LocalizedStringKey(activeFilter.titleKey))
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                 Text("\(filteredGroupEntries.count) 个分组")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -207,7 +276,11 @@ struct BorderlessContentView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color.blue))
+                    .background(
+                        Circle()
+                            .fill(LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    )
+                    .shadow(color: Color.blue.opacity(0.3), radius: 8, y: 4)
             }
             .buttonStyle(.plain)
         }
@@ -218,6 +291,7 @@ struct BorderlessContentView: View {
     private var borderlessFilterBar: some View {
         HStack(spacing: 8) {
             ForEach(TaskFilter.displayCases) { filter in
+                let isActive = activeFilter == filter
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         if filter == .privateSpace && !isProUser {
@@ -229,14 +303,22 @@ struct BorderlessContentView: View {
                     }
                 } label: {
                     Text(LocalizedStringKey(filter.titleKey))
-                        .font(.subheadline.weight(activeFilter == filter ? .semibold : .regular))
-                        .foregroundStyle(activeFilter == filter ? .blue : .secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
+                        .font(.subheadline.weight(isActive ? .semibold : .regular))
+                        .foregroundStyle(isActive ? .white : .secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
                         .background(
-                            activeFilter == filter
-                                ? Capsule().fill(Color.blue.opacity(0.1))
-                                : Capsule().fill(Color.clear)
+                            Group {
+                                if isActive {
+                                    Capsule()
+                                        .fill(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
+                                        .shadow(color: Color.blue.opacity(0.25), radius: 6, y: 3)
+                                } else {
+                                    Capsule()
+                                        .fill(glassBackground)
+                                        .overlay(Capsule().stroke(glassBorder, lineWidth: 0.5))
+                                }
+                            }
                         )
                 }
                 .buttonStyle(.plain)
@@ -257,61 +339,104 @@ struct BorderlessContentView: View {
         let progress = total > 0 ? Double(completed) / Double(total) : 0
 
         return HStack(spacing: 16) {
+            // 渐变进度环
             ZStack {
                 Circle()
-                    .stroke(Color.blue.opacity(0.15), lineWidth: 5)
-                    .frame(width: 44, height: 44)
+                    .stroke(
+                        colorScheme == .dark ? Color.blue.opacity(0.12) : Color.blue.opacity(0.10),
+                        lineWidth: 5
+                    )
+                    .frame(width: 48, height: 48)
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .frame(width: 44, height: 44)
+                    .stroke(
+                        LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                    )
+                    .frame(width: 48, height: 48)
                     .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 0.4), value: progress)
                 Text("\(Int(progress * 100))%")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(
+                        LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing)
+                    )
             }
             Text("\(completed)/\(total) 已完成")
-                .font(.subheadline)
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
             Spacer()
         }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(glassBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(glassBorder, lineWidth: 0.5)
+                )
+        )
+        .shadow(color: glassShadow, radius: 8, y: 3)
     }
 
     // MARK: - 无界分组
 
     private func borderlessGroupSection(group: TaskGroup, tasks: [TaskItem]) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             // 分组标题
             HStack(spacing: 12) {
                 GroupIcon(name: group.iconName, size: 18, tint: .blue)
                 Text(group.title)
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.system(size: 20, weight: .bold))
                 Spacer()
                 let completed = tasks.filter { $0.isCompleted }.count
                 Text("\(completed)/\(tasks.count)")
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
             }
 
             // 任务列表
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 ForEach(tasks) { task in
                     borderlessTaskRow(task: task, group: group)
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(glassBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(glassBorder, lineWidth: 0.5)
+                )
+        )
+        .shadow(color: glassShadow, radius: 10, y: 4)
     }
 
     private func borderlessTaskRow(task: TaskItem, group: TaskGroup) -> some View {
         HStack(spacing: 14) {
-            // 完成状态圆点
+            // 渐变完成按钮
             Button {
-                toggleTask(task)
+                withAnimation(.spring(duration: 0.25)) {
+                    toggleTask(task)
+                }
             } label: {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22))
-                    .foregroundStyle(task.isCompleted ? .green : .secondary)
+                ZStack {
+                    if task.isCompleted {
+                        Circle()
+                            .fill(LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 24, height: 24)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                    } else {
+                        Circle()
+                            .stroke(glassBorder, lineWidth: 1.5)
+                            .frame(width: 24, height: 24)
+                    }
+                }
             }
             .buttonStyle(.plain)
 
@@ -342,30 +467,60 @@ struct BorderlessContentView: View {
                     .foregroundStyle(priority == .urgent ? .red : .orange)
             }
         }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
     }
 
     // MARK: - 空状态
 
     private var borderlessEmptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "tray")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            Text("还没有任务分组")
-                .font(.title3.weight(.semibold))
-            Text("点击右上角 + 创建你的第一个分组")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.12), Color.cyan.opacity(0.08)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 80, height: 80)
+                Image(systemName: "tray")
+                    .font(.system(size: 32))
+                    .foregroundStyle(
+                        LinearGradient(colors: [.blue, .cyan], startPoint: .top, endPoint: .bottom)
+                    )
+            }
+            VStack(spacing: 8) {
+                Text("还没有任务分组")
+                    .font(.title3.weight(.semibold))
+                Text("点击右上角 + 创建你的第一个分组")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 80)
     }
 
     private var borderlessPrivacyLock: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 32))
-                .foregroundStyle(.blue)
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.blue.opacity(0.12), Color.cyan.opacity(0.08)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 72, height: 72)
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(
+                        LinearGradient(colors: [.blue, .cyan], startPoint: .top, endPoint: .bottom)
+                    )
+            }
             Text("隐私空间已锁定")
                 .font(.headline)
             Button {
@@ -373,10 +528,14 @@ struct BorderlessContentView: View {
             } label: {
                 Label("解锁", systemImage: "faceid")
                     .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(Color.blue))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(
+                        Capsule()
+                            .fill(LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing))
+                    )
                     .foregroundStyle(.white)
+                    .shadow(color: Color.blue.opacity(0.3), radius: 8, y: 4)
             }
             .buttonStyle(.plain)
             .disabled(isPrivacyUnlocking)
