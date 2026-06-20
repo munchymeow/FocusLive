@@ -28,54 +28,21 @@ struct BorderlessProfileView: View {
     @AppStorage(Self.proStatusKey, store: UserDefaults(suiteName: appGroupID))
     private var isProUser: Bool = false
 
-    // MARK: - Ambient Glass 设计 token
-
-    private var backgroundColor: Color {
-        colorScheme == .dark
-            ? Color(red: 0.06, green: 0.06, blue: 0.08)
-            : Color(red: 0.97, green: 0.97, blue: 0.99)
-    }
-
-    private var glassBackground: Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.04)
-            : Color.black.opacity(0.02)
-    }
-
-    private var glassBorder: Color {
-        colorScheme == .dark
-            ? Color.white.opacity(0.08)
-            : Color.black.opacity(0.05)
-    }
-
-    private var glassShadow: Color {
-        colorScheme == .dark
-            ? Color.black.opacity(0.2)
-            : Color.black.opacity(0.04)
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
-                // 环境层：背景色
-                backgroundColor.ignoresSafeArea()
-
-                // 环境层：模糊光晕
-                ambientBlobs
+                AmbientGlass.background(for: colorScheme).ignoresSafeArea()
+                AmbientBlobs()
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // 标题
+                    VStack(alignment: .leading, spacing: AmbientGlass.sectionSpacing) {
                         borderlessHeader
-
-                        // 会员
                         borderlessMemberRow
 
-                        // 个性化
-                        borderlessSection(title: "个性化") {
+                        borderlessSection(title: String(localized: "个性化")) {
                             borderlessNavigationRow(
-                                title: "修改锁屏卡片",
-                                subtitle: "调整实时活动显示条数与透明度",
+                                title: String(localized: "修改锁屏卡片"),
+                                subtitle: String(localized: "调整实时活动显示条数与透明度"),
                                 icon: "square.grid.2x2.fill",
                                 iconColor: .orange
                             ) {
@@ -83,11 +50,14 @@ struct BorderlessProfileView: View {
                             }
                         }
 
-                        // 通用
-                        borderlessSection(title: "通用") {
+                        borderlessSection(title: String(localized: "通用")) {
                             borderlessActionRow(
-                                title: areActivitiesEnabled ? "实时活动已开启" : "实时活动权限未开启",
-                                subtitle: areActivitiesEnabled ? "可在系统设置中管理" : "实时活动未开启，手机将无法实时显示任务",
+                                title: areActivitiesEnabled
+                                    ? String(localized: "实时活动已开启")
+                                    : String(localized: "实时活动权限未开启"),
+                                subtitle: areActivitiesEnabled
+                                    ? String(localized: "可在系统设置中管理")
+                                    : String(localized: "放心～更新频率低不耗电。"),
                                 icon: areActivitiesEnabled ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
                                 iconColor: areActivitiesEnabled ? .green : .orange
                             ) {
@@ -95,45 +65,41 @@ struct BorderlessProfileView: View {
                             }
                         }
 
-                        // 其他
-                        borderlessSection(title: "其他") {
-                            borderlessActionRow(title: "语言设置", icon: "globe", iconColor: .blue) { openAppSettings() }
-                            borderlessActionRow(title: "给个好评", icon: "star.fill", iconColor: .blue) { requestReview() }
-                            borderlessActionRow(title: "问题反馈", icon: "envelope.fill", iconColor: .blue) { openFeedbackSite() }
+                        borderlessSection(title: String(localized: "其他")) {
+                            borderlessActionRow(title: String(localized: "语言设置"), icon: "globe", iconColor: .blue) { openAppSettings() }
+                            borderlessActionRow(title: String(localized: "给个好评"), icon: "star.fill", iconColor: .blue) { requestReview() }
+                            borderlessActionRow(title: String(localized: "问题反馈"), icon: "envelope.fill", iconColor: .blue) { openFeedbackSite() }
                         }
 
-                        // 实验室
-                        borderlessSection(title: "实验室") {
+                        borderlessSection(title: String(localized: "实验室")) {
                             borderlessNavigationRow(
-                                title: "实验室",
-                                subtitle: "体验实验性功能与新版 UI",
+                                title: String(localized: "实验室"),
+                                subtitle: String(localized: "体验实验性功能与新版 UI"),
                                 icon: "flask.fill",
                                 iconColor: .purple,
-                                badge: "Beta"
+                                badge: String(localized: "Beta")
                             ) {
                                 LabView()
                             }
                         }
 
-                        // 关于
-                        borderlessSection(title: "关于") {
-                            borderlessNavigationRow(title: "软件说明", icon: "doc.text.fill", iconColor: .blue) {
+                        borderlessSection(title: String(localized: "关于")) {
+                            borderlessNavigationRow(title: String(localized: "软件说明"), icon: "doc.text.fill", iconColor: .blue) {
                                 SoftwareInfoView()
                             }
-                            borderlessActionRow(title: "隐私声明", icon: "hand.raised.fill", iconColor: .purple) { openPrivacyPolicy() }
-                            borderlessActionRow(title: "创作者激励", icon: "heart.fill", iconColor: .pink) { openCreatorSupport() }
+                            borderlessActionRow(title: String(localized: "隐私声明"), icon: "hand.raised.fill", iconColor: .purple) { openPrivacyPolicy() }
+                            borderlessActionRow(title: String(localized: "创作者激励"), icon: "heart.fill", iconColor: .pink) { openCreatorSupport() }
                         }
 
-                        // 底部
                         borderlessFooter
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, AmbientGlass.pagePadding)
                     .padding(.top, 12)
                     .padding(.bottom, 120)
                 }
             }
             .navigationTitle("")
-            .navigationBarHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 refreshActivityAuthorization()
                 ensureFirstLaunchTimestamp()
@@ -150,49 +116,12 @@ struct BorderlessProfileView: View {
         }
     }
 
-    // MARK: - 环境光晕
-
-    private var ambientBlobs: some View {
-        ZStack {
-            // 光晕 1：蓝青渐变，左上偏移（与 ContentView 对称）
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: colorScheme == .dark
-                            ? [Color.cyan.opacity(0.25), Color.blue.opacity(0.18)]
-                            : [Color.cyan.opacity(0.15), Color.blue.opacity(0.10)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 300, height: 300)
-                .blur(radius: 80)
-                .offset(x: -120, y: -200)
-
-            // 光晕 2：薄荷蓝渐变，右下偏移
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: colorScheme == .dark
-                            ? [Color.mint.opacity(0.18), Color.blue.opacity(0.12)]
-                            : [Color.mint.opacity(0.10), Color.blue.opacity(0.06)],
-                        startPoint: .topTrailing,
-                        endPoint: .bottomLeading
-                    )
-                )
-                .frame(width: 260, height: 260)
-                .blur(radius: 70)
-                .offset(x: 130, y: 240)
-        }
-        .allowsHitTesting(false)
-    }
-
     // MARK: - 标题
 
     private var borderlessHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("你好")
+                Text(String(localized: "感谢您使用 FocusScreen"))
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                 Image(isProUser ? "logoPro" : "logo")
                     .resizable()
@@ -210,39 +139,14 @@ struct BorderlessProfileView: View {
     private var borderlessMemberRow: some View {
         NavigationLink { SubscriptionView() } label: {
             HStack(spacing: 14) {
-                // 渐变图标背景
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.blue.opacity(0.9), Color.blue.opacity(0.55)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 36, height: 36)
-                    Image(systemName: "crown.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.white)
-                }
-
-                Text("成为会员")
+                iconBadge(systemName: "crown.fill", color: .blue)
+                Text(String(localized: "成为会员"))
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                chevron
             }
             .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(glassBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(glassBorder, lineWidth: 0.5)
-                    )
-            )
-            .shadow(color: glassShadow, radius: 8, y: 3)
+            .glassCard()
         }
         .buttonStyle(.plain)
     }
@@ -260,14 +164,14 @@ struct BorderlessProfileView: View {
             }
             .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(glassBackground)
+                RoundedRectangle(cornerRadius: AmbientGlass.cornerRadius, style: .continuous)
+                    .fill(AmbientGlass.glassFill(for: colorScheme))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(glassBorder, lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: AmbientGlass.cornerRadius, style: .continuous)
+                            .stroke(AmbientGlass.glassBorder(for: colorScheme), lineWidth: 0.5)
                     )
             )
-            .shadow(color: glassShadow, radius: 8, y: 3)
+            .shadow(color: AmbientGlass.glassShadow(for: colorScheme), radius: 8, y: 3)
         }
     }
 
@@ -302,21 +206,7 @@ struct BorderlessProfileView: View {
 
     private func borderlessRowContent(title: String, subtitle: String?, icon: String, iconColor: Color, badge: String?) -> some View {
         HStack(spacing: 14) {
-            // 渐变图标背景
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [iconColor.opacity(0.9), iconColor.opacity(0.55)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 36, height: 36)
-                Image(systemName: icon)
-                    .font(.system(size: 16))
-                    .foregroundStyle(.white)
-            }
+            iconBadge(systemName: icon, color: iconColor)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
@@ -347,18 +237,41 @@ struct BorderlessProfileView: View {
                 }
             }
             Spacer()
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.tertiary)
+            chevron
         }
         .padding(.vertical, 10)
+    }
+
+    // MARK: - 共享组件
+
+    private func iconBadge(systemName: String, color: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: AmbientGlass.iconCornerRadius, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [color.opacity(0.9), color.opacity(0.55)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 36, height: 36)
+            Image(systemName: systemName)
+                .font(.system(size: 16))
+                .foregroundStyle(.white)
+        }
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.tertiary)
     }
 
     // MARK: - 底部
 
     private var borderlessFooter: some View {
         VStack(spacing: 6) {
-            Text("Made By")
+            Text(String(localized: "Made By"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack(spacing: 6) {
