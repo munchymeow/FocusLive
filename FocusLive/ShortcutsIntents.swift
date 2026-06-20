@@ -11,8 +11,6 @@ import Foundation
 import WidgetKit
 import os.log
 
-/// App Group 标识符
-private let appGroupID = "group.com.QingTeng.FocusLive"
 
 /// 统一日志记录器（可在 Xcode Console 和 Mac Console.app 中查看）
 private let logger = Logger(subsystem: "com.zhaohaowei.FocusLive", category: "Shortcuts")
@@ -230,7 +228,7 @@ struct CreateGroupAndAddTaskIntent: AppIntent {
     @Parameter(title: "分组名称")
     var groupName: String
     
-    @Parameter(title: "分组图标", default: "📁")
+    @Parameter(title: "分组图标", default: "folder.fill")
     var groupIcon: String
     
     @Parameter(title: "任务标题")
@@ -266,7 +264,7 @@ struct CreateGroupAndAddTaskIntent: AppIntent {
         let groups = try context.fetch(descriptor)
         let maxOrder = groups.compactMap { $0.sortOrder }.max() ?? -1
         
-        let icon = groupIcon.isEmpty ? "📁" : groupIcon
+        let icon = groupIcon.isEmpty ? "folder.fill" : groupIcon
         let newGroup = TaskGroup(
             title: groupName,
             iconName: icon,

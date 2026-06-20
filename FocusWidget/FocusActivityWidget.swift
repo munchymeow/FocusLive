@@ -21,6 +21,13 @@ private let compactViewKey = "compactViewEnabled"
 private let dynamicIslandEnabledKey = "liveActivityDynamicIslandEnabled"
 private let liveActivityAppearanceKey = "liveActivitySystemAppearance"
 
+/// 判断字符串是否为 SF Symbol 名（与 GroupIcon.isSFSymbolName 同逻辑）
+private func isSFSymbolName(_ name: String) -> Bool {
+    guard !name.isEmpty else { return false }
+    let pattern = "^[a-z][a-z0-9._-]*$"
+    return name.range(of: pattern, options: .regularExpression) != nil
+}
+
 /// Live Activity Widget 视图
 struct FocusActivityWidget: Widget {
     private var isDynamicIslandEnabled: Bool {
@@ -55,7 +62,13 @@ struct FocusActivityWidget: Widget {
         return DynamicIsland {
             DynamicIslandExpandedRegion(.leading) {
                 HStack(spacing: 6) {
-                    Text(context.state.groupIcon)
+                    if isSFSymbolName(context.state.groupIcon) {
+                        Image(systemName: context.state.groupIcon)
+                            .font(.system(size: 14))
+                    } else {
+                        Text(context.state.groupIcon)
+                            .font(.system(size: 14))
+                    }
                     Text(context.state.groupTitle)
                         .font(.headline)
                         .lineLimit(1)
@@ -63,14 +76,17 @@ struct FocusActivityWidget: Widget {
             }
             DynamicIslandExpandedRegion(.trailing) {
                 if context.attributes.groupID.hasPrefix("motivation_") {
-                    Text("💡")
+                    Image(systemName: "sparkles")
                         .font(.headline)
                 } else if context.state.totalCount > 0 {
                     Text("\(context.state.completedCount)/\(context.state.totalCount)")
                         .font(.headline.monospacedDigit())
                 } else {
-                    Text("🔔\(context.state.reminderTasks.count)")
-                        .font(.headline.monospacedDigit())
+                    HStack(spacing: 2) {
+                        Image(systemName: "bell.badge.fill")
+                        Text("\(context.state.reminderTasks.count)")
+                    }
+                    .font(.headline.monospacedDigit())
                 }
             }
             DynamicIslandExpandedRegion(.bottom) {
@@ -132,18 +148,26 @@ struct FocusActivityWidget: Widget {
                 }
             }
         } compactLeading: {
-            Text(context.state.groupIcon)
-                .font(.system(size: 14))
+            if isSFSymbolName(context.state.groupIcon) {
+                Image(systemName: context.state.groupIcon)
+                    .font(.system(size: 14))
+            } else {
+                Text(context.state.groupIcon)
+                    .font(.system(size: 14))
+            }
         } compactTrailing: {
             if context.attributes.groupID.hasPrefix("motivation_") {
-                Text("💡")
+                Image(systemName: "sparkles")
                     .font(.caption)
             } else if context.state.totalCount > 0 {
                 Text("\(context.state.completedCount)/\(context.state.totalCount)")
                     .font(.caption.monospacedDigit())
             } else {
-                Text("🔔\(context.state.reminderTasks.count)")
-                    .font(.caption.monospacedDigit())
+                HStack(spacing: 2) {
+                    Image(systemName: "bell.badge.fill")
+                    Text("\(context.state.reminderTasks.count)")
+                }
+                .font(.caption.monospacedDigit())
             }
         } minimal: {
             if context.attributes.groupID.hasPrefix("motivation_") {
@@ -519,10 +543,15 @@ struct LockScreenLiveActivityView: View {
         VStack(alignment: .leading, spacing: 0) {
             // 头部：钉死在卡片顶部
             HStack(alignment: .center) {
-                // 左上：emoji + 分组标题
+                // 左上：icon + 分组标题
                 HStack(spacing: 6) {
-                    Text(context.state.groupIcon)
-                        .font(.system(size: headerIconSize))
+                    if isSFSymbolName(context.state.groupIcon) {
+                        Image(systemName: context.state.groupIcon)
+                            .font(.system(size: headerIconSize))
+                    } else {
+                        Text(context.state.groupIcon)
+                            .font(.system(size: headerIconSize))
+                    }
 
                     Text(context.state.groupTitle)
                         .font(.system(size: scaledHeaderFontSize, weight: .semibold))
@@ -876,7 +905,7 @@ struct TaskRowView: View {
 } contentStates: {
     FocusAttributes.ContentState(
         groupTitle: "晚自修",
-        groupIcon: "🌙",
+        groupIcon: "moon.stars.fill",
         tasks: [
             TaskItemSnapshot(
                 id: "1",

@@ -10,20 +10,12 @@ import ActivityKit
 import SwiftUI
 import SwiftData
 import WidgetKit
+import os
 
-/// App Group 标识符
-private let appGroupID = "group.com.QingTeng.FocusLive"
 private let allowedGroupIDsKey = "liveActivityAllowedGroupIDs"
 private let proStatusKey = "isProUser"
 private let smartReminderKey = "smartReminderEnabled"
 private let dailyMotivationEnabledKey = "dailyMotivationEnabled"
-private let lastMotivationDateKey = "lastMotivationDate"
-private let currentMotivationQuoteKey = "currentMotivationQuote"
-private let currentMotivationAuthorKey = "currentMotivationAuthor"
-private let useCustomMotivationQuoteKey = "useCustomMotivationQuote"
-private let customMotivationQuoteKey = "customMotivationQuote"
-private let customMotivationAuthorKey = "customMotivationAuthor"
-private let widgetDisplaySnapshotKey = "widgetDisplaySnapshot"
 
 /// 待同步的任务变更记录
 struct PendingTaskChange: Codable {
@@ -33,15 +25,34 @@ struct PendingTaskChange: Codable {
     let timestamp: Double
 }
 
+private struct SmartReminderCandidate {
+    let id: String
+    let title: String
+    let time: Date
+    let priority: Priority
+}
+
 /// Live Activity 管理器（单例）
 @MainActor
 final class ActivityManager {
     static let shared = ActivityManager()
     
+    private var scheduledSyncTask: Task<Void, Never>?
+
     private init() {}
     
     // MARK: - 核心方法：自动同步所有分组的 Live Activity
     
+    /// 合并短时间内连续触发的同步请求，适合 SwiftUI onChange / 设置滑动等高频入口。
+    func scheduleSyncActivities(groups: [TaskGroup]) {
+        scheduledSyncTask?.cancel()
+        scheduledSyncTask = Task { @MainActor [groups] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            performSyncActivities(groups: groups)
+        }
+    }
+
     /// 自动同步 Live Activities
     /// - Parameter groups: 当前 App 中的所有任务分组
     ///
@@ -50,6 +61,12 @@ final class ActivityManager {
     /// 2. 遍历 groups，如果某个 group 有未完成任务且没有对应的 Activity，则自动创建
     /// 3. 如果某个 Activity 对应的 group 已被删除、为空、或已全部完成，则结束该 Activity
     func syncActivities(groups: [TaskGroup]) {
+        scheduledSyncTask?.cancel()
+        scheduledSyncTask = nil
+        performSyncActivities(groups: groups)
+    }
+
+    private func performSyncActivities(groups: [TaskGroup]) {
         // 获取所有当前运行中的 Live Activities
         let runningActivities = Activity<FocusAttributes>.activities
         
@@ -81,10 +98,10 @@ final class ActivityManager {
         // 提取所有有效分组的 ID
         let validGroupIDs = Set(validGroups.map { $0.id.uuidString })
         
-        print("🔄 同步 Live Activities...")
-        print("   运行中的 Activities: \(runningGroupIDs.count) 个")
-        print("   当前分组数: \(groups.count) 个")
-        print("   有效分组数(有未完成任务): \(validGroups.count) 个")
+        debugLog("🔄 同步 Live Activities...")
+        debugLog("   运行中的 Activities: \(runningGroupIDs.count) 个")
+        debugLog("   当前分组数: \(groups.count) 个")
+        debugLog("   有效分组数(有未完成任务): \(validGroups.count) 个")
         
         // ========== 第一步：为有未完成任务的分组创建/更新 Activity ==========
         for group in validGroups {
@@ -93,11 +110,11 @@ final class ActivityManager {
             // 检查是否已经存在该分组的 Activity
             if !runningGroupIDs.contains(groupIDString) {
                 // 不存在，自动创建新的 Live Activity
-                print("   ✅ 为分组 '\(group.title)' 创建新 Activity")
+                debugLog("   ✅ 为分组 '\(group.title)' 创建新 Activity")
                 startActivity(for: group)
             } else {
                 // 已存在，仅更新内容
-                print("   🔁 分组 '\(group.title)' 已有 Activity，更新内容")
+                debugLog("   🔁 分组 '\(group.title)' 已有 Activity，更新内容")
                 updateActivity(groupID: groupIDString, group: group)
             }
         }
@@ -119,24 +136,26 @@ final class ActivityManager {
                 let publicTasks = publicTasks(for: group)
                 let publicIncomplete = publicTasks.filter { !$0.isCompleted }
                 if publicTasks.isEmpty {
-                    print("   🔒 分组 '\(group.title)' 仅含隐私任务，结束 Activity")
+                    debugLog("   🔒 分组 '\(group.title)' 仅含隐私任务，结束 Activity")
                 } else if publicIncomplete.isEmpty {
-                    print("   🎉 分组 '\(group.title)' 已全部完成，结束 Activity")
+                    debugLog("   🎉 分组 '\(group.title)' 已全部完成，结束 Activity")
                 } else {
-                    print("   ❌ 分组 '\(group.title)' 不满足显示条件，结束 Activity")
+                    debugLog("   ❌ 分组 '\(group.title)' 不满足显示条件，结束 Activity")
                 }
             } else {
-                print("   ❌ 分组 ID '\(groupID)' 已删除，结束对应 Activity")
+                debugLog("   ❌ 分组 ID '\(groupID)' 已删除，结束对应 Activity")
             }
                 endActivity(groupID: groupID)
             }
         }
         
-        print("✅ 同步完成！")
+        debugLog("✅ 同步完成！")
         
         // 检查并创建智能提醒 Live Activity（仅Pro用户且开启开关）
         if isProUser && isSmartReminderEnabled() {
             checkAndCreateSmartReminders(groups: groups)
+        } else {
+            endSmartReminderActivities()
         }
 
         // 调度/取消本地通知智能提醒
@@ -154,9 +173,6 @@ final class ActivityManager {
         // 根据每日鼓励开关与分组选择同步励志名言活动
         checkAndCreateMotivationActivityIfNeeded()
 
-        // 持久化主屏 Widget 当前应显示的内容
-        persistWidgetSnapshot(validGroups: validGroups)
-        
         // 刷新主屏幕小组件
         WidgetCenter.shared.reloadAllTimelines()
     }
@@ -165,7 +181,7 @@ final class ActivityManager {
     /// - Parameter groups: 当前所有分组
     func checkAndCreateSmartReminders(groups: [TaskGroup]) {
         let now = Date()
-        var reminders: [(title: String, time: Date, priority: Priority)] = []
+        var reminders: [SmartReminderCandidate] = []
         
         // 检查分组提醒
         for group in groups {
@@ -174,7 +190,8 @@ final class ActivityManager {
                reminderType != .none {
                 let reminderTime = calculateReminderTime(for: scheduledTime, reminderType: reminderType)
                 if reminderTime <= now && scheduledTime > now {
-                    reminders.append((
+                    reminders.append(SmartReminderCandidate(
+                        id: smartReminderID(kind: "group", sourceID: group.id.uuidString, scheduledTime: scheduledTime),
                         title: "分组提醒: \(group.title)",
                         time: scheduledTime,
                         priority: group.priority ?? .medium
@@ -192,7 +209,8 @@ final class ActivityManager {
                    !(task.isCompleted) {
                     let reminderTime = calculateReminderTime(for: scheduledTime, reminderType: reminderType)
                     if reminderTime <= now && scheduledTime > now {
-                        reminders.append((
+                        reminders.append(SmartReminderCandidate(
+                            id: smartReminderID(kind: "task", sourceID: task.id.uuidString, scheduledTime: scheduledTime),
                             title: "任务提醒: \(task.title)",
                             time: scheduledTime,
                             priority: task.priority ?? .medium
@@ -212,7 +230,10 @@ final class ActivityManager {
         
         // 只显示最高优先级的提醒（Pro用户）
         if let topReminder = reminders.first, currentProStatus() {
+            endSmartReminderActivities(except: topReminder.id)
             createSmartReminderActivity(reminder: topReminder)
+        } else {
+            endSmartReminderActivities()
         }
     }
     
@@ -250,55 +271,60 @@ final class ActivityManager {
     }
     
     /// 创建智能提醒Activity
-    private func createSmartReminderActivity(reminder: (title: String, time: Date, priority: Priority)) {
-        let reminderID = "smart_reminder_\(UUID().uuidString)"
-        let attributes = FocusAttributes(groupID: reminderID)
-        
-        let timeInterval = reminder.time.timeIntervalSinceNow
-        let countdownText: String
-        if timeInterval <= 0 {
-            countdownText = "时间已到！"
-        } else if timeInterval < 3600 { // 不到1小时
-            let minutes = Int(timeInterval / 60)
-            countdownText = "还剩 \(minutes) 分钟"
-        } else if timeInterval < 86400 { // 不到1天
-            let hours = Int(timeInterval / 3600)
-            let minutes = Int((timeInterval.truncatingRemainder(dividingBy: 3600)) / 60)
-            countdownText = "还剩 \(hours)小时\(minutes)分钟"
-        } else {
-            let days = Int(timeInterval / 86400)
-            countdownText = "还剩 \(days) 天"
-        }
-        
+    private func createSmartReminderActivity(reminder: SmartReminderCandidate) {
         let contentState = FocusAttributes.ContentState(
             groupTitle: reminder.title,
-            groupIcon: "⏰",
+            groupIcon: "alarm.fill",
             tasks: [
                 TaskItemSnapshot(
                     id: "countdown",
-                    title: countdownText,
-                    isCompleted: false
+                    title: reminder.title,
+                    isCompleted: false,
+                    taskType: .reminder,
+                    dueDate: reminder.time,
+                    scheduledTime: reminder.time
                 )
             ],
-            renderVersion: Date().timeIntervalSince1970,
+            renderVersion: currentRenderVersion(),
             fontColorName: currentFontColorName()
         )
+
+        if let activity = Activity<FocusAttributes>.activities.first(where: {
+            $0.attributes.groupID == reminder.id
+        }) {
+            guard shouldUpdateActivity(from: activity.content.state, to: contentState) else {
+                return
+            }
+            Task {
+                await activity.update(ActivityContent(state: contentState, staleDate: reminder.time))
+            }
+            return
+        }
+
+        let attributes = FocusAttributes(groupID: reminder.id)
         
         do {
-            let activity = try Activity.request(
+            _ = try Activity.request(
                 attributes: attributes,
-                content: .init(state: contentState, staleDate: nil),
+                content: .init(state: contentState, staleDate: reminder.time),
                 pushType: nil
             )
-            print("🔔 智能提醒 Activity 已创建: \(reminder.title)")
-            
-            // 设置自动结束时间
+            debugLog("🔔 智能提醒 Activity 已创建: \(reminder.title)")
+        } catch {
+            debugLog("⚠️ 创建智能提醒失败: \(error.localizedDescription)")
+        }
+    }
+
+    private func smartReminderID(kind: String, sourceID: String, scheduledTime: Date) -> String {
+        "smart_reminder_\(kind)_\(sourceID)_\(Int(scheduledTime.timeIntervalSince1970))"
+    }
+
+    private func endSmartReminderActivities(except activeID: String? = nil) {
+        for activity in Activity<FocusAttributes>.activities where activity.attributes.groupID.hasPrefix("smart_reminder_") {
+            guard activity.attributes.groupID != activeID else { continue }
             Task {
-                try? await Task.sleep(nanoseconds: UInt64(max(timeInterval, 60)) * 1_000_000_000)
                 await activity.end(nil, dismissalPolicy: .immediate)
             }
-        } catch {
-            print("⚠️ 创建智能提醒失败: \(error.localizedDescription)")
         }
     }
     
@@ -313,21 +339,21 @@ final class ActivityManager {
             groupTitle: group.title,
             groupIcon: group.iconName,
             tasks: publicTasks.map { TaskItemSnapshot(from: $0) },
-            renderVersion: Date().timeIntervalSince1970,
+            renderVersion: currentRenderVersion(),
             fontColorName: currentFontColorName()
         )
 
-        print("═══════════════════════════════════════════")
-        print("📱 [ActivityManager] 创建 Live Activity")
-        print("   📌 groupID: \(groupIDString)")
-        print("   📌 groupTitle: \(group.title)")
-        print("   📋 任务列表(非隐私):")
+        debugLog("═══════════════════════════════════════════")
+        debugLog("📱 [ActivityManager] 创建 Live Activity")
+        debugLog("   📌 groupID: \(groupIDString)")
+        debugLog("   📌 groupTitle: \(group.title)")
+        debugLog("   📋 任务列表(非隐私):")
         for task in publicTasks {
-            print("      - id: \(task.id.uuidString)")
-            print("        title: \(task.title)")
-            print("        completed: \(task.isCompleted)")
+            debugLog("      - id: \(task.id.uuidString)")
+            debugLog("        title: \(task.title)")
+            debugLog("        completed: \(task.isCompleted)")
         }
-        print("═══════════════════════════════════════════")
+        debugLog("═══════════════════════════════════════════")
         
         do {
             let activity = try Activity.request(
@@ -335,10 +361,10 @@ final class ActivityManager {
                 content: .init(state: contentState, staleDate: nil),
                 pushType: nil
             )
-            print("      ✨ Activity 已创建，ID: \(activity.id)")
-            print("      ✨ Activity groupID: \(activity.attributes.groupID)")
+            debugLog("      ✨ Activity 已创建，ID: \(activity.id)")
+            debugLog("      ✨ Activity groupID: \(activity.attributes.groupID)")
         } catch {
-            print("      ⚠️ 创建 Activity 失败: \(error.localizedDescription)")
+            debugLog("      ⚠️ 创建 Activity 失败: \(error.localizedDescription)")
         }
     }
     
@@ -348,7 +374,7 @@ final class ActivityManager {
         guard let activity = Activity<FocusAttributes>.activities.first(where: { 
             $0.attributes.groupID == groupID 
         }) else {
-            print("   ⚠️ 未找到 groupID=\(groupID) 的 Activity")
+            debugLog("   ⚠️ 未找到 groupID=\(groupID) 的 Activity")
             return
         }
         
@@ -357,9 +383,14 @@ final class ActivityManager {
             groupTitle: group.title,
             groupIcon: group.iconName,
             tasks: publicTasks.map { TaskItemSnapshot(from: $0) },
-            renderVersion: Date().timeIntervalSince1970,
+            renderVersion: currentRenderVersion(),
             fontColorName: currentFontColorName()
         )
+
+        guard shouldUpdateActivity(from: activity.content.state, to: newState) else {
+            debugLog("      ⏭️ Activity 内容未变化，跳过更新")
+            return
+        }
 
         Task {
             await updateActivityAsync(activity: activity, newState: newState)
@@ -370,33 +401,7 @@ final class ActivityManager {
     private func updateActivityAsync(activity: Activity<FocusAttributes>, newState: FocusAttributes.ContentState) async {
         let content = ActivityContent(state: newState, staleDate: nil)
         await activity.update(content)
-        print("      🔄 Activity 已更新")
-    }
-    
-    /// 更新指定分组中某个任务的状态
-    func updateTaskStatus(groupID: String, taskID: String, isCompleted: Bool) {
-        guard let activity = Activity<FocusAttributes>.activities.first(where: { 
-            $0.attributes.groupID == groupID 
-        }) else {
-            return
-        }
-        
-        var updatedTasks = activity.content.state.tasks
-        if let index = updatedTasks.firstIndex(where: { $0.id == taskID }) {
-            updatedTasks[index] = updatedTasks[index].updatingCompletion(isCompleted)
-            
-            let newState = FocusAttributes.ContentState(
-                groupTitle: activity.content.state.groupTitle,
-                groupIcon: activity.content.state.groupIcon,
-                tasks: updatedTasks,
-                renderVersion: Date().timeIntervalSince1970,
-                fontColorName: activity.content.state.fontColorName
-            )
-            
-            Task {
-                await updateActivityAsync(activity: activity, newState: newState)
-            }
-        }
+        debugLog("      🔄 Activity 已更新")
     }
     
     /// 结束指定分组的 Live Activity
@@ -409,7 +414,7 @@ final class ActivityManager {
         
         Task {
             await activity.end(nil, dismissalPolicy: .immediate)
-            print("      🛑 Activity 已结束")
+            debugLog("      🛑 Activity 已结束")
         }
     }
     
@@ -420,7 +425,7 @@ final class ActivityManager {
                 await activity.end(nil, dismissalPolicy: .immediate)
             }
         }
-        print("🛑 所有 Activities 已结束")
+        debugLog("🛑 所有 Activities 已结束")
     }
 
     /// 获取分组中可用于 Live Activity 的非隐私任务
@@ -461,6 +466,42 @@ final class ActivityManager {
     private func currentFontColorName() -> String {
         UserDefaults(suiteName: appGroupID)?.string(forKey: "liveActivityFontColor") ?? "default"
     }
+
+    private func currentRenderVersion() -> Double {
+        let defaults = UserDefaults(suiteName: appGroupID)
+        let parts = [
+            "count=\((defaults?.object(forKey: "liveActivityMaxCount") as? NSNumber)?.intValue ?? 4)",
+            "opacity=\((defaults?.object(forKey: "liveActivityBackgroundOpacity") as? NSNumber)?.doubleValue ?? 0.0)",
+            "fontSize=\((defaults?.object(forKey: "liveActivityFontSize") as? NSNumber)?.doubleValue ?? 1.5)",
+            "fontColor=\(currentFontColorName())",
+            "showCompleted=\((defaults?.object(forKey: "liveActivityShowCompletedTasks") as? Bool) ?? true)",
+            "compact=\((defaults?.object(forKey: "compactViewEnabled") as? Bool) ?? false)",
+            "dynamicIsland=\((defaults?.object(forKey: "liveActivityDynamicIslandEnabled") as? Bool) ?? false)",
+            "appearance=\(defaults?.string(forKey: "liveActivitySystemAppearance") ?? "system")",
+            "pro=\(currentProStatus())"
+        ]
+        return Double(stableHash(parts.joined(separator: "|")))
+    }
+
+    private func stableHash(_ value: String) -> UInt64 {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in value.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return hash
+    }
+
+    private func shouldUpdateActivity(
+        from currentState: FocusAttributes.ContentState,
+        to newState: FocusAttributes.ContentState
+    ) -> Bool {
+        currentState.groupTitle != newState.groupTitle ||
+        currentState.groupIcon != newState.groupIcon ||
+        currentState.tasks != newState.tasks ||
+        currentState.fontColorName != newState.fontColorName ||
+        currentState.renderVersion != newState.renderVersion
+    }
     
     /// 获取智能提醒开关状态
     /// - Returns: 是否开启智能提醒
@@ -468,13 +509,6 @@ final class ActivityManager {
         UserDefaults(suiteName: appGroupID)?.bool(forKey: smartReminderKey) ?? false
     }
 
-    /// 检查是否有活跃的分组活动
-    /// - Returns: 是否有分组活动正在运行
-    func hasActiveGroupActivities() -> Bool {
-        let runningActivities = Activity<FocusAttributes>.activities
-        return runningActivities.contains { !isSpecialActivity(groupID: $0.attributes.groupID) }
-    }
-    
     /// 创建励志名言活动
     /// - Parameters:
     ///   - quote: 名言文本
@@ -490,7 +524,7 @@ final class ActivityManager {
         
         let contentState = FocusAttributes.ContentState(
             groupTitle: "每日鼓励",
-            groupIcon: "💡",
+            groupIcon: "sparkles",
             tasks: [
                 TaskItemSnapshot(
                     id: "quote",
@@ -498,7 +532,7 @@ final class ActivityManager {
                     isCompleted: false
                 )
             ],
-            renderVersion: Date().timeIntervalSince1970,
+            renderVersion: currentRenderVersion(),
             fontColorName: currentFontColorName()
         )
         
@@ -508,9 +542,9 @@ final class ActivityManager {
                 content: .init(state: contentState, staleDate: nil),
                 pushType: nil
             )
-            print("💡 励志名言 Activity 已创建")
+            debugLog("💡 励志名言 Activity 已创建")
         } catch {
-            print("⚠️ 创建励志名言 Activity 失败: \(error.localizedDescription)")
+            debugLog("⚠️ 创建励志名言 Activity 失败: \(error.localizedDescription)")
         }
     }
     
@@ -522,88 +556,9 @@ final class ActivityManager {
                 await activity.end(nil, dismissalPolicy: .immediate)
             }
         }
-        print("💡 励志名言 Activity 已结束")
+        debugLog("💡 励志名言 Activity 已结束")
     }
     
-    // MARK: - Widget 变更同步
-    
-    /// 从 App Groups 读取并应用 Widget 中的任务变更
-    /// - Parameter context: SwiftData ModelContext
-    /// - Returns: 是否有变更被应用
-    @discardableResult
-    func syncPendingChangesFromWidget(context: ModelContext) -> Bool {
-        guard let defaults = UserDefaults(suiteName: appGroupID) else {
-            print("⚠️ 无法访问 App Groups")
-            return false
-        }
-        
-        // 读取待同步的变更
-        guard let pendingChangesData = defaults.array(forKey: "pendingTaskChanges") as? [[String: Any]],
-              !pendingChangesData.isEmpty else {
-            return false
-        }
-        
-        print("📥 发现 \(pendingChangesData.count) 个待同步的 Widget 变更")
-        
-        var hasChanges = false
-        
-        for changeDict in pendingChangesData {
-            guard let taskID = changeDict["taskID"] as? String,
-                  let isCompleted = changeDict["isCompleted"] as? Bool else {
-                continue
-            }
-            
-            // 查找对应的任务
-            guard let taskUUID = UUID(uuidString: taskID) else {
-                print("   ⚠️ 无效的任务 ID: \(taskID)")
-                continue
-            }
-            
-            let descriptor = FetchDescriptor<TaskItem>(
-                predicate: #Predicate<TaskItem> { $0.id == taskUUID }
-            )
-            
-            do {
-                let tasks = try context.fetch(descriptor)
-                if let task = tasks.first {
-                    if task.isCompleted != isCompleted {
-                        task.isCompleted = isCompleted
-                        hasChanges = true
-                        print("   ✅ 任务 '\(task.title)' 状态已同步为: \(isCompleted)")
-                    }
-                } else {
-                    print("   ⚠️ 未找到任务 ID: \(taskID)")
-                }
-            } catch {
-                print("   ⚠️ 查询任务失败: \(error.localizedDescription)")
-            }
-        }
-        
-        // 清空已处理的变更队列
-        defaults.removeObject(forKey: "pendingTaskChanges")
-        
-        if hasChanges {
-            do {
-                try context.save()
-                print("💾 SwiftData 变更已保存")
-            } catch {
-                print("⚠️ 保存失败: \(error.localizedDescription)")
-            }
-        }
-        
-        return hasChanges
-    }
-    
-    /// 检查是否有待同步的 Widget 变更
-    func hasPendingWidgetChanges() -> Bool {
-        guard let defaults = UserDefaults(suiteName: appGroupID) else {
-            return false
-        }
-        
-        let pendingChanges = defaults.array(forKey: "pendingTaskChanges") as? [[String: Any]] ?? []
-        return !pendingChanges.isEmpty
-    }
-
     /// 检查并创建励志名言活动（如果需要）
     private func checkAndCreateMotivationActivityIfNeeded() {
         guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
@@ -716,7 +671,7 @@ final class ActivityManager {
         let fullText = quote + ((author?.isEmpty == false) ? "\n——\(author!)" : "")
         let newState = FocusAttributes.ContentState(
             groupTitle: "每日鼓励",
-            groupIcon: "💡",
+            groupIcon: "sparkles",
             tasks: [
                 TaskItemSnapshot(
                     id: "quote",
@@ -724,11 +679,14 @@ final class ActivityManager {
                     isCompleted: false
                 )
             ],
-            renderVersion: Date().timeIntervalSince1970,
+            renderVersion: currentRenderVersion(),
             fontColorName: currentFontColorName()
         )
 
         for activity in activities {
+            guard shouldUpdateActivity(from: activity.content.state, to: newState) else {
+                continue
+            }
             Task {
                 await updateActivityAsync(activity: activity, newState: newState)
             }
@@ -789,71 +747,5 @@ final class ActivityManager {
     /// 是否为特殊 Activity（不是普通分组 Activity）
     private func isSpecialActivity(groupID: String) -> Bool {
         groupID.hasPrefix("motivation_") || groupID.hasPrefix("smart_reminder_")
-    }
-
-    // MARK: - 主屏 Widget 快照同步
-
-    private func persistWidgetSnapshot(validGroups: [TaskGroup]) {
-        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
-
-        if let group = validGroups.first {
-            let state = FocusAttributes.ContentState(
-                groupTitle: group.title,
-                groupIcon: group.iconName,
-                tasks: publicTasks(for: group).map { TaskItemSnapshot(from: $0) },
-                renderVersion: Date().timeIntervalSince1970,
-                fontColorName: currentFontColorName()
-            )
-            persistWidgetSnapshot(state: state, defaults: defaults)
-            return
-        }
-
-        if let reminderActivity = Activity<FocusAttributes>.activities.first(where: {
-            $0.attributes.groupID.hasPrefix("smart_reminder_")
-        }) {
-            persistWidgetSnapshot(state: reminderActivity.content.state, defaults: defaults)
-            return
-        }
-
-        let isMotivationEnabled = defaults.object(forKey: dailyMotivationEnabledKey) as? Bool ?? true
-        let shouldShowMotivation = isMotivationEnabled
-
-        if shouldShowMotivation {
-            let quote = defaults.string(forKey: currentMotivationQuoteKey) ?? "愿你今天也保持专注。"
-            let author = defaults.string(forKey: currentMotivationAuthorKey)
-            defaults.set([
-                "kind": "motivation",
-                "quote": quote,
-                "author": author ?? ""
-            ], forKey: widgetDisplaySnapshotKey)
-        } else {
-            defaults.set(["kind": "empty"], forKey: widgetDisplaySnapshotKey)
-        }
-    }
-
-    private func persistWidgetSnapshot(state: FocusAttributes.ContentState, defaults: UserDefaults? = nil) {
-        guard let widgetDefaults = defaults ?? UserDefaults(suiteName: appGroupID) else { return }
-
-        let taskDictionaries = state.incompleteTasks.map { task in
-            var dictionary: [String: Any] = [
-                "id": task.id,
-                "title": task.title,
-                "isCompleted": task.isCompleted,
-                "isReminder": task.taskType == .reminder
-            ]
-            if let dueText = task.formattedDueDate {
-                dictionary["dueText"] = dueText
-            }
-            return dictionary
-        }
-
-        widgetDefaults.set([
-            "kind": "tasks",
-            "groupTitle": state.groupTitle,
-            "groupIcon": state.groupIcon,
-            "completedCount": state.completedCount,
-            "totalCount": state.totalCount,
-            "tasks": taskDictionaries
-        ], forKey: widgetDisplaySnapshotKey)
     }
 }

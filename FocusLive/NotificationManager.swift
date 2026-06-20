@@ -7,16 +7,25 @@
 
 import Foundation
 import UserNotifications
+import SwiftData
+import WidgetKit
+import os
 
 private let notificationCategoryID = "TASK_REMINDER"
+private let notificationCompleteActionID = "COMPLETE_TASK"
 private let notificationIDPrefix = "FocusLive.SmartReminder."
 
 /// 本地通知管理器（单例）
 @MainActor
-final class NotificationManager {
+final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
 
-    private init() {}
+    private override init() {
+        super.init()
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        registerNotificationActions(center: center)
+    }
 
     // MARK: - 权限
 
@@ -24,6 +33,8 @@ final class NotificationManager {
     @discardableResult
     func requestPermission() async -> Bool {
         let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        registerNotificationActions(center: center)
         let settings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional:
@@ -32,7 +43,7 @@ final class NotificationManager {
             do {
                 return try await center.requestAuthorization(options: [.alert, .sound, .badge])
             } catch {
-                print("⚠️ 请求通知权限失败: \(error)")
+                debugLog("⚠️ 请求通知权限失败: \(error)")
                 return false
             }
         default:
@@ -60,7 +71,9 @@ final class NotificationManager {
 
                 scheduleNotification(
                     id: notificationIDPrefix + task.id.uuidString,
-                    title: "📌 即将开始：\(group.title)",
+                    groupID: group.id.uuidString,
+                    taskID: task.id.uuidString,
+                    title: "即将开始：\(group.title)",
                     body: "\(task.title)  ·  还有 2 小时",
                     fireDate: fireDate
                 )
@@ -80,12 +93,38 @@ final class NotificationManager {
 
     // MARK: - 内部工具
 
-    private func scheduleNotification(id: String, title: String, body: String, fireDate: Date) {
+    private func registerNotificationActions(center: UNUserNotificationCenter) {
+        let completeAction = UNNotificationAction(
+            identifier: notificationCompleteActionID,
+            title: "完成",
+            options: []
+        )
+        let category = UNNotificationCategory(
+            identifier: notificationCategoryID,
+            actions: [completeAction],
+            intentIdentifiers: [],
+            options: []
+        )
+        center.setNotificationCategories([category])
+    }
+
+    private func scheduleNotification(
+        id: String,
+        groupID: String,
+        taskID: String,
+        title: String,
+        body: String,
+        fireDate: Date
+    ) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         content.categoryIdentifier = notificationCategoryID
+        content.userInfo = [
+            "groupID": groupID,
+            "taskID": taskID
+        ]
 
         let components = Calendar.current.dateComponents(
             [.year, .month, .day, .hour, .minute],
@@ -96,8 +135,67 @@ final class NotificationManager {
 
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("⚠️ 调度通知失败 [\(id)]: \(error.localizedDescription)")
+                debugLog("⚠️ 调度通知失败 [\(id)]: \(error.localizedDescription)")
             }
         }
     }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .list, .sound]
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard response.actionIdentifier == "COMPLETE_TASK" else { return }
+        let userInfo = response.notification.request.content.userInfo
+        await completeTaskFromNotification(userInfo: userInfo)
+    }
+
+    @MainActor
+    private func completeTaskFromNotification(userInfo: [AnyHashable: Any]) {
+        guard let taskID = userInfo["taskID"] as? String,
+              let taskUUID = UUID(uuidString: taskID) else {
+            return
+        }
+
+        do {
+            let context = try makeSharedModelContext()
+            let descriptor = FetchDescriptor<TaskItem>(
+                predicate: #Predicate<TaskItem> { $0.id == taskUUID }
+            )
+            guard let task = try context.fetch(descriptor).first,
+                  task.taskType != .reminder else {
+                return
+            }
+            task.isCompleted = true
+            try context.save()
+            WidgetCenter.shared.reloadAllTimelines()
+        } catch {
+            debugLog("⚠️ 通知完成任务失败: \(error.localizedDescription)")
+        }
+    }
+
+    private func makeSharedModelContext() throws -> ModelContext {
+        let schema = Schema([TaskGroup.self, TaskItem.self])
+        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) else {
+            throw NotificationPersistenceError.appGroupUnavailable
+        }
+        let storeURL = containerURL.appendingPathComponent("FocusLive.store")
+        let configuration = ModelConfiguration(
+            schema: schema,
+            url: storeURL,
+            allowsSave: true
+        )
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        return ModelContext(container)
+    }
+}
+
+private enum NotificationPersistenceError: Error {
+    case appGroupUnavailable
 }

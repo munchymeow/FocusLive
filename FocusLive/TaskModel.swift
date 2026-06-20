@@ -45,7 +45,7 @@ enum TaskType: String, Codable {
 }
 
 /// 附件类型
-struct Attachment: Codable, Hashable {
+struct Attachment: Codable, Hashable, Identifiable {
     let id: UUID
     let type: AttachmentType
     let url: String

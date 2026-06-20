@@ -7,9 +7,8 @@
 
 import SwiftUI
 import SwiftData
+import os
 
-/// App Group 标识符
-private let appGroupID = "group.com.QingTeng.FocusLive"
 
 @main
 struct FocusLiveApp: App {
@@ -22,23 +21,20 @@ struct FocusLiveApp: App {
         ])
         
         // 使用 App Group 共享容器，确保快捷指令和主应用访问同一个数据库
-        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) else {
-            fatalError("无法访问 App Group 容器")
+        // 无法访问时（如测试环境）回退到 in-memory 存储
+        if let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) {
+            let storeURL = containerURL.appendingPathComponent("FocusLive.store")
+            let config = ModelConfiguration(schema: schema, url: storeURL, allowsSave: true)
+            do {
+                return try ModelContainer(for: schema, configurations: [config])
+            } catch {
+                #if DEBUG
+                let msg = "SwiftData container creation failed, falling back to in-memory: \(error.localizedDescription)"
+                debugLog(msg)
+                #endif
+            }
         }
-        
-        let storeURL = containerURL.appendingPathComponent("FocusLive.store")
-        
-        let modelConfiguration = ModelConfiguration(
-            schema: schema,
-            url: storeURL,
-            allowsSave: true
-        )
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
+        return try! ModelContainer(for: schema, configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)])
     }()
 
     var body: some Scene {
@@ -54,17 +50,17 @@ struct FocusLiveApp: App {
     
     /// 处理 URL Scheme
     private func handleURL(_ url: URL) {
-        print("═══════════════════════════════════════════")
-        print("🔗 [FocusLiveApp] 收到 URL: \(url.absoluteString)")
-        print("═══════════════════════════════════════════")
+        debugLog("═══════════════════════════════════════════")
+        debugLog("🔗 [FocusLiveApp] 收到 URL: \(url.absoluteString)")
+        debugLog("═══════════════════════════════════════════")
         
         guard url.scheme == "focuslive" else { 
-            print("   ⚠️ 不是 focuslive scheme，忽略")
+            debugLog("   ⚠️ 不是 focuslive scheme，忽略")
             return 
         }
         
         let host = url.host ?? ""
-        print("   📌 host: \(host)")
+        debugLog("   📌 host: \(host)")
         
         switch host {
         case "toggle":
@@ -88,19 +84,19 @@ struct FocusLiveApp: App {
             }
             
         default:
-            print("   ⚠️ 未知的 host: \(host)")
+            debugLog("   ⚠️ 未知的 host: \(host)")
             break
         }
     }
     
     /// 处理切换任务状态的 URL
     private func handleToggleTask(url: URL) {
-        print("🔄 [handleToggleTask] 开始处理...")
+        debugLog("🔄 [handleToggleTask] 开始处理...")
         
         // 解析 URL 参数
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems else {
-            print("   ⚠️ 无法解析 URL 参数")
+            debugLog("   ⚠️ 无法解析 URL 参数")
             return
         }
         
@@ -119,12 +115,12 @@ struct FocusLiveApp: App {
         }
         
         guard let groupID = groupID, let taskID = taskID else {
-            print("   ⚠️ 缺少 groupID 或 taskID")
+            debugLog("   ⚠️ 缺少 groupID 或 taskID")
             return
         }
         
-        print("   📌 groupID: \(groupID)")
-        print("   📌 taskID: \(taskID)")
+        debugLog("   📌 groupID: \(groupID)")
+        debugLog("   📌 taskID: \(taskID)")
         
         // 在数据库中查找并更新任务
         Task { @MainActor in
@@ -132,7 +128,7 @@ struct FocusLiveApp: App {
             
             // 查找任务
             guard let taskUUID = UUID(uuidString: taskID) else {
-                print("   ⚠️ 无效的 taskID")
+                debugLog("   ⚠️ 无效的 taskID")
                 return
             }
             
@@ -146,7 +142,7 @@ struct FocusLiveApp: App {
                     // 切换任务状态
                     task.isCompleted.toggle()
                     try context.save()
-                    print("   ✅ 任务 '\(task.title)' 状态已切换为: \(task.isCompleted)")
+                    debugLog("   ✅ 任务 '\(task.title)' 状态已切换为: \(task.isCompleted)")
                     
                     // 同步 Live Activity
                     let groupDescriptor = FetchDescriptor<TaskGroup>()
@@ -154,10 +150,10 @@ struct FocusLiveApp: App {
                         ActivityManager.shared.syncActivities(groups: groups)
                     }
                 } else {
-                    print("   ⚠️ 未找到任务")
+                    debugLog("   ⚠️ 未找到任务")
                 }
             } catch {
-                print("   ⚠️ 查询/保存失败: \(error)")
+                debugLog("   ⚠️ 查询/保存失败: \(error)")
             }
         }
     }

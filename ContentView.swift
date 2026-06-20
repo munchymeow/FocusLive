@@ -9,9 +9,6 @@ import SwiftUI
 import Foundation
 import SwiftData
 
-/// 任务筛选类型
-enum TaskFilter: String, CaseIterable, Identifiable {
-    case incomplete
     case all
     case privateSpace
     case completed
@@ -51,6 +48,7 @@ enum TaskFilter: String, CaseIterable, Identifiable {
         [.all, .incomplete, .completed, .privateSpace]
     }
 }
+
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
@@ -241,9 +239,8 @@ struct ContentView: View {
     // MARK: - 顶部与筛选视图
     private var headerView: some View {
         HStack(spacing: 12) {
-            Image(systemName: "checklist")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.blue)
+            Text("📋")
+                .font(.system(size: 22))
                 .frame(width: 36, height: 36)
                 .background(
                     Circle()
@@ -958,7 +955,7 @@ struct ContentView: View {
             }
         }
         
-        guard saveChanges(failureMessage: String(localized: "同步锁屏变更失败")) else { return }
+        guard saveChanges(failureMessage: "同步锁屏变更失败") else { return }
 
         defaults.removeObject(forKey: "pendingTaskChanges")
         debugLog("📥 待处理变更已全部同步")
@@ -983,7 +980,7 @@ struct ContentView: View {
             }
             
             if hasChanges {
-                guard saveChanges(failureMessage: String(localized: "重置每日打卡失败")) else { return }
+                guard saveChanges(failureMessage: "重置每日打卡失败") else { return }
                 debugLog("🔄 每日打卡任务已重置")
             }
             
@@ -1034,13 +1031,13 @@ struct ContentView: View {
         let title = String(format: String(localized: "新分组 %lld"), Int64(taskGroups.count + 1))
         let newGroup = TaskGroup(
             title: title,
-            iconName: "folder.fill",
+            iconName: "📁",
             isPrivate: isPrivate,
             sortOrder: maxOrder + 1,
             tasks: []
         )
         modelContext.insert(newGroup)
-        saveChanges(failureMessage: String(localized: "创建分组失败"))
+        saveChanges(failureMessage: "创建分组失败")
     }
 
     /// 创建每日打卡分组
@@ -1050,7 +1047,7 @@ struct ContentView: View {
         let title = String(format: String(localized: "新打卡分组 %lld"), Int64(taskGroups.count + 1))
         let checkInGroup = TaskGroup(
             title: title,
-            iconName: "calendar",
+            iconName: "📅",
             isPrivate: isPrivate,
             sortOrder: maxOrder + 1,
             tasks: []
@@ -1064,7 +1061,7 @@ struct ContentView: View {
         )
         checkInGroup.tasks.append(checkInTask)
         modelContext.insert(checkInGroup)
-        saveChanges(failureMessage: String(localized: "创建打卡分组失败"))
+        saveChanges(failureMessage: "创建打卡分组失败")
     }
 
     /// 创建提醒事项分组，并自动创建一条提醒事项
@@ -1074,7 +1071,7 @@ struct ContentView: View {
         let title = String(format: String(localized: "新提醒分组 %lld"), Int64(taskGroups.count + 1))
         let reminderGroup = TaskGroup(
             title: title,
-            iconName: "bell.badge.fill",
+            iconName: "🔔",
             isPrivate: isPrivate,
             sortOrder: maxOrder + 1,
             tasks: []
@@ -1088,7 +1085,7 @@ struct ContentView: View {
         )
         reminderGroup.tasks.append(reminderTask)
         modelContext.insert(reminderGroup)
-        saveChanges(failureMessage: String(localized: "创建提醒分组失败"))
+        saveChanges(failureMessage: "创建提醒分组失败")
     }
     
     /// 上移分组
@@ -1099,7 +1096,7 @@ struct ContentView: View {
         let tempOrder = group.sortOrder ?? 0
         group.sortOrder = prevGroup.sortOrder ?? 0
         prevGroup.sortOrder = tempOrder
-        if saveChanges(failureMessage: String(localized: "调整分组顺序失败")) {
+        if saveChanges(failureMessage: "调整分组顺序失败") {
             syncActivitiesWithGroups()
         }
     }
@@ -1112,7 +1109,7 @@ struct ContentView: View {
         let tempOrder = group.sortOrder ?? 0
         group.sortOrder = nextGroup.sortOrder ?? 0
         nextGroup.sortOrder = tempOrder
-        if saveChanges(failureMessage: String(localized: "调整分组顺序失败")) {
+        if saveChanges(failureMessage: "调整分组顺序失败") {
             syncActivitiesWithGroups()
         }
     }

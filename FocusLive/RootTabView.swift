@@ -8,7 +8,6 @@
 import SwiftUI
 import SwiftData
 
-private let appGroupID = "group.com.QingTeng.FocusLive"
 private let liveActivityAppearanceKey = "liveActivitySystemAppearance"
 
 struct RootTabView: View {
@@ -51,7 +50,7 @@ struct RootTabView: View {
 
     private func syncLiveActivitiesForAppearanceChange() {
         Task { @MainActor in
-            ActivityManager.shared.syncActivities(groups: taskGroups)
+            ActivityManager.shared.scheduleSyncActivities(groups: taskGroups)
         }
     }
 }

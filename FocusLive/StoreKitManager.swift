@@ -11,8 +11,6 @@ import Combine
 
 @MainActor
 final class StoreKitManager: ObservableObject {
-    static let shared = StoreKitManager()
-    
     private let appGroupID = "group.com.QingTeng.FocusLive"
     private let proStatusKey = "isProUser"
     private let productIDs = [

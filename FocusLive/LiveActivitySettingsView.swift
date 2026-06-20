@@ -27,7 +27,7 @@ struct LiveActivitySettingsView: View {
     @AppStorage(Self.opacityKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var backgroundOpacity: Double = 0.0
 
-    /// 字体大小缩放比例 (0.7 ~ 2.0，默认 1.0)
+    /// 字体大小缩放比例 (0.7 ~ 2.0，默认 1.5)
     @AppStorage(Self.fontSizeKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var fontSizeScale: Double = 1.5
 
@@ -252,7 +252,7 @@ struct LiveActivitySettingsView: View {
             } header: {
                 Text("锁屏实时活动")
             } footer: {
-                Text("默认任务文字会根据卡片背景与系统深浅色自动切换黑白；手动选色会覆盖默认效果。关闭“显示灵动岛”后，锁屏卡片保持正常，灵动岛会尽量不展示内容。")
+                Text("默认任务文字会根据卡片背景与系统深浅色自动切换黑白；手动选色会覆盖默认效果。iOS 不支持仅保留锁屏而彻底关闭灵动岛，关闭“显示灵动岛”后会改为尽量最小化展示。")
             }
             
             if isProUser {
@@ -410,7 +410,7 @@ struct LiveActivitySettingsView: View {
     /// - Returns: Void
     private func syncLiveActivities() {
         Task { @MainActor in
-            ActivityManager.shared.syncActivities(groups: taskGroups)
+            ActivityManager.shared.scheduleSyncActivities(groups: taskGroups)
         }
     }
 }
