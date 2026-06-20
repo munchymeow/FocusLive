@@ -1,29 +1,29 @@
 //
-//  RootTabView.swift
+//  BorderlessRootTabView.swift
 //  FocusLive
 //
-//  Created by 赵豪伟 on 2026/1/14.
+//  测试版无界 TabView：无卡片、无边框的极简设计
 //
 
 import SwiftUI
 import SwiftData
 
-private let liveActivityAppearanceKey = "liveActivitySystemAppearance"
-
-struct RootTabView: View {
+struct BorderlessRootTabView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @Query private var taskGroups: [TaskGroup]
-    @AppStorage("labBorderlessUIEnabled", store: UserDefaults(suiteName: appGroupID))
-    private var borderlessUIEnabled = false
 
     var body: some View {
-        Group {
-            if borderlessUIEnabled {
-                BorderlessRootTabView()
-            } else {
-                normalTabView
-            }
+        TabView {
+            BorderlessContentView()
+                .tabItem {
+                    Label("事项", systemImage: "checklist")
+                }
+
+            BorderlessProfileView()
+                .tabItem {
+                    Label("我的", systemImage: "person.fill")
+                }
         }
         .onAppear {
             persistLiveActivityAppearance()
@@ -40,24 +40,10 @@ struct RootTabView: View {
         }
     }
 
-    private var normalTabView: some View {
-        TabView {
-            ContentView()
-                .tabItem {
-                    Label("事项", systemImage: "checklist")
-                }
-
-            ProfileView()
-                .tabItem {
-                    Label("我的", systemImage: "person.fill")
-                }
-        }
-    }
-
     private func persistLiveActivityAppearance(_ scheme: ColorScheme? = nil) {
         let resolvedScheme = scheme ?? colorScheme
         let appearance = resolvedScheme == .dark ? "dark" : "light"
-        UserDefaults(suiteName: appGroupID)?.set(appearance, forKey: liveActivityAppearanceKey)
+        UserDefaults(suiteName: appGroupID)?.set(appearance, forKey: "liveActivitySystemAppearance")
     }
 
     private func syncLiveActivitiesForAppearanceChange() {
@@ -68,6 +54,6 @@ struct RootTabView: View {
 }
 
 #Preview {
-    RootTabView()
+    BorderlessRootTabView()
         .modelContainer(for: TaskGroup.self, inMemory: true)
 }

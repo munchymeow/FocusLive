@@ -90,6 +90,9 @@ struct ProfileView: View {
                             reviewRow
                             feedbackRow
                         }
+                        sectionView(titleKey: "实验室") {
+                            labRow
+                        }
                         sectionView(titleKey: "关于") {
                             softwareInfoRow
                             privacyPolicyRow
@@ -322,6 +325,25 @@ struct ProfileView: View {
                     iconColor: .pink,
                     trailingTextKey: nil,
                     badgeTextKey: nil
+                ),
+                cardBackground: cardBackground
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var labRow: some View {
+        NavigationLink {
+            LabView()
+        } label: {
+            ProfileRow(
+                item: ProfileItem(
+                    titleKey: "实验室",
+                    subtitleKey: "体验实验性功能与新版 UI",
+                    iconName: "flask.fill",
+                    iconColor: .purple,
+                    trailingTextKey: nil,
+                    badgeTextKey: "Beta"
                 ),
                 cardBackground: cardBackground
             )
