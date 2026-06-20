@@ -11,7 +11,6 @@ import WidgetKit
 import AppIntents
 import UIKit
 
-private let appGroupID = "group.com.QingTeng.FocusLive"
 private let liveActivityDisplayCountKey = "liveActivityMaxCount"
 private let liveActivityOpacityKey = "liveActivityBackgroundOpacity"
 private let liveActivityFontSizeKey   = "liveActivityFontSize"
@@ -80,6 +79,21 @@ struct FocusActivityWidget: Widget {
                     Text(quoteTask.title)
                         .font(.subheadline)
                         .lineLimit(2)
+                } else if context.attributes.groupID.hasPrefix("smart_reminder_"),
+                          let targetDate = context.state.tasks.first?.dueDate {
+                    HStack(spacing: 8) {
+                        Image(systemName: "timer")
+                            .foregroundStyle(.orange)
+                        if targetDate > Date() {
+                            Text(timerInterval: Date()...targetDate, countsDown: true)
+                                .font(.subheadline.monospacedDigit())
+                                .lineLimit(1)
+                        } else {
+                            Text("时间已到")
+                                .font(.subheadline)
+                                .lineLimit(1)
+                        }
+                    }
                 } else if let firstTask = context.state.todoIncompleteTasks.first {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("下一个: \(firstTask.title)")
@@ -169,6 +183,14 @@ struct LockScreenLiveActivityView: View {
     private var isMotivationActivity: Bool {
         context.attributes.groupID.hasPrefix("motivation_")
     }
+
+    private var isSmartReminderActivity: Bool {
+        context.attributes.groupID.hasPrefix("smart_reminder_")
+    }
+
+    private var smartReminderTargetDate: Date? {
+        context.state.tasks.first?.dueDate
+    }
     
     /// 每日鼓励正文
     private var motivationText: String {
@@ -236,9 +258,9 @@ struct LockScreenLiveActivityView: View {
     private var maxDisplayCount: Int {
         let storedValue = UserDefaults(suiteName: appGroupID)?
             .object(forKey: liveActivityDisplayCountKey) as? NSNumber
-        let defaultValue = isCompactView ? 8 : (isProUser ? 4 : 3)
+        let limit = isProUser ? 8 : 3
+        let defaultValue = min(4, limit)
         let value = storedValue?.intValue ?? defaultValue
-        let limit = isCompactView ? 8 : (isProUser ? 4 : 3)
         return min(max(value, 1), limit)
     }
     
@@ -324,7 +346,7 @@ struct LockScreenLiveActivityView: View {
         UserDefaults(suiteName: appGroupID)?.bool(forKey: proStatusKey) ?? false
     }
 
-    /// 用户设置的字体大小缩放比例（0.7 ~ 1.4，默认 1.0）
+    /// 用户设置的字体大小缩放比例（0.7 ~ 2.0，默认 1.5）
     private var fontSizeScale: CGFloat {
         let value = UserDefaults(suiteName: appGroupID)?
             .object(forKey: liveActivityFontSizeKey) as? Double ?? 1.5
@@ -490,6 +512,8 @@ struct LockScreenLiveActivityView: View {
     var body: some View {
         if isMotivationActivity {
             motivationCardBody
+        } else if isSmartReminderActivity {
+            smartReminderCardBody
         } else {
         // 整体容器 - 始终使用最大尺寸
         VStack(alignment: .leading, spacing: 0) {
@@ -583,10 +607,77 @@ struct LockScreenLiveActivityView: View {
         .activitySystemActionForegroundColor(contentColorScheme == .light ? Color.black : Color.white)
         }
     }
+
+    private var smartReminderCardBody: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.orange.opacity(isDarkAppearance ? 0.30 : 0.18))
+                            .frame(width: 28, height: 28)
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.orange)
+                    }
+
+                    Text(context.state.groupTitle)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(headerTextColor)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Text("智能提醒")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.orange.opacity(isDarkAppearance ? 0.18 : 0.12))
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("距离计划时间")
+                    .font(.caption)
+                    .foregroundStyle(customTextColor.opacity(0.72))
+
+                if let targetDate = smartReminderTargetDate, targetDate > Date() {
+                    Text(timerInterval: Date()...targetDate, countsDown: true)
+                        .font(.system(size: 30, weight: .bold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(customTextColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                } else {
+                    Text("时间已到")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .foregroundStyle(.orange)
+                        .lineLimit(1)
+                }
+            }
+
+            if let targetDate = smartReminderTargetDate {
+                Text(targetDate.formatted(.dateTime.month().day().hour().minute()))
+                    .font(.caption)
+                    .foregroundStyle(customTextColor.opacity(0.72))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(14)
+        .background(glassBackground)
+        .environment(\.colorScheme, contentColorScheme)
+        .activityBackgroundTint(.clear)
+        .activitySystemActionForegroundColor(contentColorScheme == .light ? Color.black : Color.white)
+    }
     
     /// 每日鼓励专用卡片（纯展示，不交互）
     private var motivationCardBody: some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .center) {
                 HStack(spacing: 8) {
                     ZStack {
@@ -664,7 +755,9 @@ struct LockScreenLiveActivityView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.top, 26)
+        .padding(.bottom, 14)
         .background(glassBackground)
         .overlay(alignment: .topTrailing) {
             Circle()
@@ -800,6 +893,22 @@ struct TaskRowView: View {
                 title: "物理练习题",
                 isCompleted: false
             ),
+        ]
+    )
+}
+
+#Preview("每日鼓励 Live Activity", as: .content, using: FocusAttributes(groupID: "motivation_preview")) {
+    FocusActivityWidget()
+} contentStates: {
+    FocusAttributes.ContentState(
+        groupTitle: "每日一句",
+        groupIcon: "sparkles",
+        tasks: [
+            TaskItemSnapshot(
+                id: "m1",
+                title: "保持专注，是对自己最温柔的承诺\n——FocusScreen",
+                isCompleted: false
+            )
         ]
     )
 }
