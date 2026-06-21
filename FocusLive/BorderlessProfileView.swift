@@ -19,10 +19,11 @@ struct BorderlessProfileView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.requestReview) private var requestReview
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var uiStyle: UIStyleManager
     @State private var areActivitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
     @State private var showSubscription = false
 
-    private var style: AppUIStyle { UIStyleManager.current }
+    private var style: AppUIStyle { uiStyle.selectedStyle }
 
     @AppStorage(Self.firstLaunchKey, store: UserDefaults(suiteName: appGroupID))
     private var firstLaunchTimestamp: Double = 0

@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import Combine
 
 // MARK: - UI 风格枚举
 
@@ -332,13 +333,23 @@ extension AppUIStyle: UIStyleTokens {
     }
 }
 
-// MARK: - 当前风格管理
+// MARK: - 当前风格管理（ObservableObject 支持热切换）
 
-enum UIStyleManager {
-    @AppStorage("selectedUIStyle", store: UserDefaults(suiteName: appGroupID))
-    static var selectedStyle: AppUIStyle = .ambientGlass
+@MainActor
+final class UIStyleManager: ObservableObject {
+    static let shared = UIStyleManager()
 
-    static var current: AppUIStyle { selectedStyle }
+    @Published var selectedStyle: AppUIStyle {
+        didSet {
+            UserDefaults(suiteName: appGroupID)?.set(selectedStyle.rawValue, forKey: "selectedUIStyle")
+        }
+    }
+
+    private init() {
+        let defaults = UserDefaults(suiteName: appGroupID)
+        let raw = defaults?.string(forKey: "selectedUIStyle") ?? AppUIStyle.ambientGlass.rawValue
+        self.selectedStyle = AppUIStyle(rawValue: raw) ?? .ambientGlass
+    }
 }
 
 // MARK: - 毛玻璃容器修饰符（风格感知）
@@ -393,7 +404,7 @@ struct StyledGlassCardModifier: ViewModifier {
 }
 
 extension View {
-    func styledGlassCard(_ style: AppUIStyle = UIStyleManager.current) -> some View {
+    func styledGlassCard(_ style: AppUIStyle) -> some View {
         modifier(StyledGlassCardModifier(style: style))
     }
 }
@@ -404,7 +415,7 @@ struct AmbientBlobs: View {
     @Environment(\.colorScheme) private var colorScheme
     let style: AppUIStyle
 
-    init(style: AppUIStyle = UIStyleManager.current) {
+    init(style: AppUIStyle) {
         self.style = style
     }
 
@@ -461,6 +472,10 @@ struct AmbientBlobs: View {
 struct GlassmorphismBackground: View {
     @Environment(\.colorScheme) private var colorScheme
     let style: AppUIStyle
+
+    init(style: AppUIStyle) {
+        self.style = style
+    }
 
     var body: some View {
         if style == .glassmorphism {

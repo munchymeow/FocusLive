@@ -2,7 +2,7 @@
 //  BorderlessRootTabView.swift
 //  FocusLive
 //
-//  测试版无界 TabView：无卡片、无边框的极简设计
+//  测试版无界 TabView：多风格设计系统
 //
 
 import SwiftUI
@@ -12,19 +12,21 @@ struct BorderlessRootTabView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @Query private var taskGroups: [TaskGroup]
+    @StateObject private var uiStyle = UIStyleManager.shared
 
     var body: some View {
         TabView {
             BorderlessContentView()
                 .tabItem {
-                    Label("事项", systemImage: "checklist")
+                    Label(String(localized: "事项"), systemImage: "checklist")
                 }
 
             BorderlessProfileView()
                 .tabItem {
-                    Label("我的", systemImage: "person.fill")
+                    Label(String(localized: "我的"), systemImage: "person.fill")
                 }
         }
+        .environmentObject(uiStyle)
         .onAppear {
             persistLiveActivityAppearance()
             syncLiveActivitiesForAppearanceChange()

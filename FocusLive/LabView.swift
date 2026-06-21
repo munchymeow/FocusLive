@@ -11,10 +11,10 @@ struct LabView: View {
     @AppStorage("labBorderlessUIEnabled", store: UserDefaults(suiteName: appGroupID))
     private var borderlessUIEnabled = false
 
-    @AppStorage("selectedUIStyle", store: UserDefaults(suiteName: appGroupID))
-    private var selectedStyle: AppUIStyle = .ambientGlass
-
+    @EnvironmentObject private var uiStyle: UIStyleManager
     @Environment(\.colorScheme) private var colorScheme
+
+    private var selectedStyle: AppUIStyle { uiStyle.selectedStyle }
 
     var body: some View {
         ScrollView {
@@ -113,30 +113,30 @@ struct LabView: View {
                 .foregroundStyle(.secondary)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(AppUIStyle.allCases) { uiStyle in
-                    styleCard(uiStyle)
+                ForEach(AppUIStyle.allCases) { candidateStyle in
+                    styleCard(candidateStyle)
                 }
             }
         }
     }
 
-    private func styleCard(_ uiStyle: AppUIStyle) -> some View {
-        let isSelected = selectedStyle == uiStyle
+    private func styleCard(_ newStyle: AppUIStyle) -> some View {
+        let isSelected = selectedStyle == newStyle
 
         return Button {
             withAnimation(.easeInOut(duration: 0.2)) {
-                selectedStyle = uiStyle
+                uiStyle.selectedStyle = newStyle
             }
         } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     ZStack {
                         Circle()
-                            .fill(uiStyle.accentColor.opacity(0.15))
+                            .fill(newStyle.accentColor.opacity(0.15))
                             .frame(width: 36, height: 36)
-                        Image(systemName: uiStyle.icon)
+                        Image(systemName: newStyle.icon)
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(uiStyle.accentColor)
+                            .foregroundStyle(newStyle.accentColor)
                     }
                     Spacer()
                     if isSelected {
@@ -147,11 +147,11 @@ struct LabView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(String(localized: uiStyle.displayName))
+                    Text(String(localized: newStyle.displayName))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
-                    Text(String(localized: uiStyle.subtitle))
+                    Text(String(localized: newStyle.subtitle))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)

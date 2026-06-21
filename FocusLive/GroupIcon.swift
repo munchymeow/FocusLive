@@ -30,10 +30,12 @@ struct GroupIcon: View {
     }
 
     /// 判断字符串是否为 SF Symbol 名（非 emoji）
-    /// 规则：非空、不含 emoji 字符、仅由 [a-z0-9._-] 组成、以小写字母开头
+    /// 规则：非空、不含 emoji 字符、仅由 [a-zA-Z0-9._-] 组成、以字母开头（大小写不敏感）
     static func isSFSymbolName(_ name: String) -> Bool {
         guard !name.isEmpty else { return false }
-        let pattern = "^[a-z][a-z0-9._-]*$"
+        // 排除包含空格/中文/emoji 的字符串
+        if name.contains(" ") || name.contains(where: { $0.isLetter && !$0.isASCII }) { return false }
+        let pattern = "^[a-zA-Z][a-zA-Z0-9._-]*$"
         return name.range(of: pattern, options: .regularExpression) != nil
     }
 }

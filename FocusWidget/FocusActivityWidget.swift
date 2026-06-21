@@ -24,7 +24,8 @@ private let liveActivityAppearanceKey = "liveActivitySystemAppearance"
 /// 判断字符串是否为 SF Symbol 名（与 GroupIcon.isSFSymbolName 同逻辑）
 private func isSFSymbolName(_ name: String) -> Bool {
     guard !name.isEmpty else { return false }
-    let pattern = "^[a-z][a-z0-9._-]*$"
+    if name.contains(" ") || name.contains(where: { $0.isLetter && !$0.isASCII }) { return false }
+    let pattern = "^[a-zA-Z][a-zA-Z0-9._-]*$"
     return name.range(of: pattern, options: .regularExpression) != nil
 }
 

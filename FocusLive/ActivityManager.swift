@@ -478,6 +478,7 @@ final class ActivityManager {
     private func currentRenderVersion() -> Double {
         let defaults = UserDefaults(suiteName: appGroupID)
         let parts = [
+            "migration=\((defaults?.integer(forKey: "liveActivityMigrationVersion") ?? 2))",
             "count=\((defaults?.object(forKey: "liveActivityMaxCount") as? NSNumber)?.intValue ?? 4)",
             "opacity=\((defaults?.object(forKey: "liveActivityBackgroundOpacity") as? NSNumber)?.doubleValue ?? 0.0)",
             "fontSize=\((defaults?.object(forKey: "liveActivityFontSize") as? NSNumber)?.doubleValue ?? 1.5)",

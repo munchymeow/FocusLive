@@ -14,9 +14,10 @@ struct BorderlessContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var uiStyle: UIStyleManager
     @Query private var taskGroups: [TaskGroup]
 
-    private var style: AppUIStyle { UIStyleManager.current }
+    private var style: AppUIStyle { uiStyle.selectedStyle }
 
     @State private var activeFilter: TaskFilter = .all
     @State private var isPrivacyUnlocked = false
@@ -412,9 +413,30 @@ struct BorderlessContentView: View {
                     borderlessTaskRow(task: task, group: group)
                 }
             }
+
+            // 添加任务按钮
+            Button(action: { addTask(to: group) }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 14))
+                    Text(addTaskButtonTitle(for: group))
+                        .font(.subheadline)
+                }
+                .foregroundStyle(style.accentColor)
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.plain)
         }
         .padding(16)
         .styledGlassCard(style)
+    }
+
+    private func addTaskButtonTitle(for group: TaskGroup) -> String {
+        switch group.tasks.first?.taskType {
+        case .reminder: return String(localized: "添加提醒")
+        case .dailyCheckIn: return String(localized: "添加打卡")
+        default: return String(localized: "添加任务")
+        }
     }
 
     private func borderlessTaskRow(task: TaskItem, group: TaskGroup) -> some View {
@@ -474,6 +496,25 @@ struct BorderlessContentView: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button(role: .destructive) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    deleteTask(task, from: group)
+                }
+            } label: {
+                Label(String(localized: "删除"), systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    deleteTask(task, from: group)
+                }
+            } label: {
+                Label(String(localized: "删除"), systemImage: "trash")
+            }
+        }
     }
 
     // MARK: - 隐私横幅
@@ -696,6 +737,42 @@ struct BorderlessContentView: View {
     private func toggleTask(_ task: TaskItem) {
         task.isCompleted.toggle()
         saveModelContext(modelContext, failureMessage: String(localized: "更新任务状态失败")) { message in
+            dataErrorMessage = message
+            showDataErrorAlert = true
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        syncActivitiesWithGroups()
+    }
+
+    private func addTask(to group: TaskGroup) {
+        let maxOrder = group.tasks.compactMap { $0.sortOrder }.max() ?? -1
+        let taskType = group.tasks.first?.taskType ?? .todo
+        let title: String
+        switch taskType {
+        case .reminder: title = String(localized: "新提醒")
+        case .dailyCheckIn: title = String(localized: "新打卡")
+        case .todo: title = String(localized: "新任务")
+        }
+        let newTask = TaskItem(
+            title: title,
+            isCompleted: false,
+            isPrivate: group.isPrivate ?? false,
+            taskType: taskType,
+            sortOrder: maxOrder + 1
+        )
+        group.tasks.append(newTask)
+        saveModelContext(modelContext, failureMessage: String(localized: "添加任务失败")) { message in
+            dataErrorMessage = message
+            showDataErrorAlert = true
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        syncActivitiesWithGroups()
+    }
+
+    private func deleteTask(_ task: TaskItem, from group: TaskGroup) {
+        group.tasks.removeAll { $0.id == task.id }
+        modelContext.delete(task)
+        saveModelContext(modelContext, failureMessage: String(localized: "删除任务失败")) { message in
             dataErrorMessage = message
             showDataErrorAlert = true
         }
