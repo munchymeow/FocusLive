@@ -261,48 +261,74 @@ struct BorderlessContentView: View {
     // MARK: - 无界标题
 
     private var borderlessHeader: some View {
-        HStack(alignment: .lastTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(LocalizedStringKey(activeFilter.titleKey))
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                Text(String(format: String(localized: "%lld 个分组"), Int64(filteredGroupEntries.count)))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            // 小票风格：顶部装饰头
+            if style.useDashedDividers {
+                ReceiptHeader(title: String(localized: "FOCUS LIVE"), style: style)
+                    .padding(.bottom, 12)
             }
-            Spacer()
 
-            Menu {
-                Button { addNewGroup(taskType: .todo) } label: {
-                    Label(String(localized: "传统待办事项"), systemImage: "checklist")
+            HStack(alignment: .lastTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(LocalizedStringKey(activeFilter.titleKey))
+                        .font(style.useMonospaceText
+                              ? .system(size: 24, weight: .bold, design: .monospaced)
+                              : .system(size: 28, weight: .bold, design: .rounded))
+                    Text(String(format: String(localized: "%lld 个分组"), Int64(filteredGroupEntries.count)))
+                        .font(style.useMonospaceText
+                              ? .system(size: 13, weight: .regular, design: .monospaced)
+                              : .subheadline)
+                        .foregroundStyle(.secondary)
                 }
-                Button { addNewGroup(taskType: .dailyCheckIn) } label: {
-                    Label(String(localized: "每日打卡"), systemImage: "calendar.badge.clock")
-                }
-                Button { addNewGroup(taskType: .reminder) } label: {
-                    Label(String(localized: "提醒事项"), systemImage: "bell.badge.fill")
-                }
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 38, height: 38)
-                    .background(Circle().fill(style.accentGradient(for: colorScheme)))
-                    // 内折射高光
-                    .overlay(
-                        Circle()
-                            .stroke(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.4), .white.opacity(0.05)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                ),
-                                lineWidth: 1
+                Spacer()
+
+                // Flat 风格 FAB 也用等宽风格
+                Menu {
+                    Button { addNewGroup(taskType: .todo) } label: {
+                        Label(String(localized: "传统待办事项"), systemImage: "checklist")
+                    }
+                    Button { addNewGroup(taskType: .dailyCheckIn) } label: {
+                        Label(String(localized: "每日打卡"), systemImage: "calendar.badge.clock")
+                    }
+                    Button { addNewGroup(taskType: .reminder) } label: {
+                        Label(String(localized: "提醒事项"), systemImage: "bell.badge.fill")
+                    }
+                } label: {
+                    if style.useDashedDividers {
+                        // 小票风格：方框 + 虚线边框
+                        Text("[ + ]")
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 0)
+                                    .stroke(style.cardBorder(for: colorScheme), style: StrokeStyle(lineWidth: 1, dash: [3]))
                             )
-                    )
-                    .shadow(color: Color.blue.opacity(0.35), radius: 10, y: 5)
+                    } else {
+                        Image(systemName: "plus")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(style.accentGradient(for: colorScheme)))
+                            // 内折射高光
+                            .overlay(
+                                Circle()
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [.white.opacity(0.4), .white.opacity(0.05)],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            )
+                            .shadow(color: Color.blue.opacity(0.35), radius: 10, y: 5)
+                    }
+                }
+                .buttonStyle(PressFeedbackStyle())
+                .accessibilityLabel(String(localized: "添加新分组"))
             }
-            .buttonStyle(PressFeedbackStyle())
-            .accessibilityLabel(String(localized: "添加新分组"))
         }
     }
 
@@ -311,41 +337,72 @@ struct BorderlessContentView: View {
     private var borderlessFilterBar: some View {
         HStack(spacing: 8) {
             ForEach(TaskFilter.displayCases) { filter in
-                let isActive = activeFilter == filter
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        if filter == .privateSpace && !isProUser {
-                            showSubscriptionSheet = true
-                        } else {
-                            activeFilter = filter
-                            if filter != .privateSpace { lastNonPrivateFilter = filter }
-                        }
-                    }
-                } label: {
-                    Text(LocalizedStringKey(filter.titleKey))
-                        .font(.subheadline.weight(isActive ? .semibold : .regular))
-                        .foregroundStyle(isActive ? .white : .secondary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(
-                            Group {
-                                if isActive {
-                                    Capsule()
-                                        .fill(style.accentGradient(for: colorScheme))
-                                        .shadow(color: Color.blue.opacity(0.25), radius: 6, y: 3)
-                                } else {
-                                    Capsule()
-                                        .fill(style.cardFill(for: colorScheme))
-                                        .overlay(Capsule().stroke(style.cardBorder(for: colorScheme), lineWidth: 0.5))
-                                }
-                            }
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(LocalizedStringKey(filter.titleKey))
-                .accessibilityAddTraits(isActive ? .isSelected : [])
+                filterPill(filter)
             }
             Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private func filterPill(_ filter: TaskFilter) -> some View {
+        let isActive = activeFilter == filter
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if filter == .privateSpace && !isProUser {
+                    showSubscriptionSheet = true
+                } else {
+                    activeFilter = filter
+                    if filter != .privateSpace { lastNonPrivateFilter = filter }
+                }
+            }
+        } label: {
+            filterPillLabel(filter, isActive: isActive)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(LocalizedStringKey(filter.titleKey))
+        .accessibilityAddTraits(isActive ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private func filterPillLabel(_ filter: TaskFilter, isActive: Bool) -> some View {
+        if style.useDashedDividers {
+            Text(filter.titleKey.uppercased())
+                .font(.system(size: 12, weight: isActive ? .bold : .regular, design: .monospaced))
+                .tracking(0.5)
+                .foregroundStyle(isActive ? .primary : .secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(filterPillBackground(isActive: isActive))
+        } else {
+            Text(LocalizedStringKey(filter.titleKey))
+                .font(.subheadline.weight(isActive ? .semibold : .regular))
+                .foregroundStyle(isActive ? .white : .secondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(filterPillBackground(isActive: isActive))
+        }
+    }
+
+    @ViewBuilder
+    private func filterPillBackground(isActive: Bool) -> some View {
+        if style.useDashedDividers {
+            Rectangle()
+                .fill(Color.clear)
+                .overlay(alignment: .bottom) {
+                    if isActive {
+                        Rectangle()
+                            .fill(style.cardBorder(for: colorScheme))
+                            .frame(height: 2)
+                    }
+                }
+        } else if isActive {
+            Capsule()
+                .fill(style.accentGradient(for: colorScheme))
+                .shadow(color: Color.blue.opacity(0.25), radius: 6, y: 3)
+        } else {
+            Capsule()
+                .fill(style.cardFill(for: colorScheme))
+                .overlay(Capsule().stroke(style.cardBorder(for: colorScheme), lineWidth: 0.5))
         }
     }
 
@@ -360,34 +417,69 @@ struct BorderlessContentView: View {
         let completed = todoTasks.filter { $0.isCompleted }.count
         let progress = total > 0 ? Double(completed) / Double(total) : 0
 
-        return HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .stroke(Color.blue.opacity(colorScheme == .dark ? 0.15 : 0.12), lineWidth: 5)
-                    .frame(width: 48, height: 48)
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(style.accentGradient(for: colorScheme), style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .frame(width: 48, height: 48)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.easeInOut(duration: 0.4), value: progress)
-                Text("\(Int(progress * 100))%")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(style.accentGradient(for: colorScheme))
+        return Group {
+            if style.useDashedDividers {
+                // 小票风格：纯文本统计，无进度环
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(String(localized: "TOTAL"))
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(total)")
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    }
+                    HStack {
+                        Text(String(localized: "DONE"))
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(completed)")
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    }
+                    HStack {
+                        Text(String(localized: "RATE"))
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(Int(progress * 100))%")
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.primary)
+                    }
+                    ReceiptDivider(style: style)
+                }
+                .padding(.horizontal, 4)
+            } else {
+                HStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .stroke(Color.blue.opacity(colorScheme == .dark ? 0.15 : 0.12), lineWidth: 5)
+                            .frame(width: 48, height: 48)
+                        Circle()
+                            .trim(from: 0, to: progress)
+                            .stroke(style.accentGradient(for: colorScheme), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                            .frame(width: 48, height: 48)
+                            .rotationEffect(.degrees(-90))
+                            .animation(.easeInOut(duration: 0.4), value: progress)
+                        Text("\(Int(progress * 100))%")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(style.accentGradient(for: colorScheme))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(format: String(localized: "%lld/%lld 已完成"), Int64(completed), Int64(total)))
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                        Text(String(format: String(localized: "%lld 个分组"), Int64(filteredGroupEntries.count)))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+                .styledGlassCard(style)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: String(localized: "%lld/%lld 已完成"), Int64(completed), Int64(total)))
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                Text(String(format: String(localized: "%lld 个分组"), Int64(filteredGroupEntries.count)))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 16)
-        .styledGlassCard(style)
     }
 
     // MARK: - 分组列表
@@ -409,13 +501,20 @@ struct BorderlessContentView: View {
         VStack(alignment: .leading, spacing: style.groupSpacing) {
             // 分组标题：图标 + 名称 + 计数
             HStack(spacing: 12) {
-                GroupIcon(name: group.iconName, size: 18, tint: .blue)
-                Text(group.title)
-                    .font(.system(size: 20, weight: .bold))
+                if !style.useDashedDividers {
+                    GroupIcon(name: group.iconName, size: 18, tint: .blue)
+                }
+                Text(style.useDashedDividers ? group.title.uppercased() : group.title)
+                    .font(style.useMonospaceText
+                          ? .system(size: 17, weight: .bold, design: .monospaced)
+                          : .system(size: 20, weight: .bold))
+                    .tracking(style.useDashedDividers ? 0.5 : 0)
                 Spacer()
                 let completed = tasks.filter { $0.isCompleted }.count
                 Text("\(completed)/\(tasks.count)")
-                    .font(.subheadline.weight(.medium))
+                    .font(style.useMonospaceText
+                          ? .system(size: 13, weight: .medium, design: .monospaced)
+                          : .subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 4)
@@ -425,20 +524,31 @@ struct BorderlessContentView: View {
                 ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
                     borderlessTaskRow(task: task, group: group)
                     if index < tasks.count - 1 {
-                        Divider()
-                            .opacity(0.4)
-                            .padding(.leading, 42)
+                        ReceiptDivider(style: style, leadingIndent: 42)
                     }
                 }
+            }
+
+            // 分组间虚线分隔（小票风格）
+            if style.useDashedDividers {
+                ReceiptDivider(style: style)
+                    .padding(.top, 4)
             }
 
             // 添加任务按钮
             Button(action: { addTask(to: group) }) {
                 HStack(spacing: 6) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 14))
+                    if style.useDashedDividers {
+                        Text("[ + ]")
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    } else {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 14))
+                    }
                     Text(addTaskButtonTitle(for: group))
-                        .font(.subheadline)
+                        .font(style.useMonospaceText
+                              ? .system(size: 13, weight: .semibold, design: .monospaced)
+                              : .subheadline)
                 }
                 .foregroundStyle(style.accentColor)
                 .padding(.vertical, 8)
@@ -458,7 +568,7 @@ struct BorderlessContentView: View {
 
     private func borderlessTaskRow(task: TaskItem, group: TaskGroup) -> some View {
         HStack(spacing: style.rowSpacing) {
-            // 渐变完成按钮
+            // 完成按钮：小票风格用方括号 [x]/[ ]，其他用渐变圆形
             Button {
                 withAnimation(.spring(duration: 0.25)) {
                     toggleTask(task)
@@ -466,39 +576,52 @@ struct BorderlessContentView: View {
                 let generator = UIImpactFeedbackGenerator(style: .light)
                 generator.impactOccurred()
             } label: {
-                ZStack {
-                    if task.isCompleted {
-                        Circle()
-                            .fill(style.successGradient(for: colorScheme))
-                            .frame(width: 24, height: 24)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                    } else {
-                        Circle()
-                            .stroke(style.cardBorder(for: colorScheme), lineWidth: 1.5)
-                            .frame(width: 24, height: 24)
+                if style.useDashedDividers {
+                    // 小票风格：[x] / [ ]
+                    Text(task.isCompleted ? "[x]" : "[ ]")
+                        .font(.system(size: 15, weight: .bold, design: .monospaced))
+                        .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                } else {
+                    ZStack {
+                        if task.isCompleted {
+                            Circle()
+                                .fill(style.successGradient(for: colorScheme))
+                                .frame(width: 24, height: 24)
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                        } else {
+                            Circle()
+                                .stroke(style.cardBorder(for: colorScheme), lineWidth: 1.5)
+                                .frame(width: 24, height: 24)
+                        }
                     }
                 }
             }
             .buttonStyle(.plain)
             .accessibilityLabel(task.isCompleted ? String(localized: "标记为未完成") : String(localized: "标记为已完成"))
 
-            // 标题与元信息
+            // 标题与元信息：小票风格用等宽字体
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.title)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(style.useMonospaceText
+                          ? .system(size: 15, weight: .medium, design: .monospaced)
+                          : .system(size: 16, weight: .medium))
                     .strikethrough(task.isCompleted && task.taskType != .reminder)
                     .foregroundStyle(task.isCompleted ? .secondary : .primary)
 
                 if let scheduledTime = task.scheduledTime {
                     HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 11))
+                        if !style.useDashedDividers {
+                            Image(systemName: "clock")
+                                .font(.system(size: 11))
+                        }
                         Text(scheduledTime, style: .date)
                         Text(scheduledTime, style: .time)
                     }
-                    .font(.caption)
+                    .font(style.useMonospaceText
+                          ? .system(size: 11, weight: .regular, design: .monospaced)
+                          : .caption)
                     .foregroundStyle(.secondary)
                 }
             }
@@ -506,12 +629,19 @@ struct BorderlessContentView: View {
             Spacer()
 
             if let priority = task.priority, priority == .urgent || priority == .high {
-                Image(systemName: priority == .urgent ? "exclamationmark.3" : "exclamationmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(priority == .urgent ? .red : .orange)
+                if style.useDashedDividers {
+                    // 小票风格：用 ! / !!! 文本标记
+                    Text(priority == .urgent ? "!!!" : "!")
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundStyle(priority == .urgent ? .red : .orange)
+                } else {
+                    Image(systemName: priority == .urgent ? "exclamationmark.3" : "exclamationmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(priority == .urgent ? .red : .orange)
+                }
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, style.useDashedDividers ? 6 : 10)
         .padding(.horizontal, 4)
         .contentShape(Rectangle())
         .contextMenu {

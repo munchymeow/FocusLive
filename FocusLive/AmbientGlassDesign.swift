@@ -84,6 +84,10 @@ protocol UIStyleTokens {
     var rowSpacing: CGFloat { get }
     var pagePadding: CGFloat { get }
     var showAmbientBlobs: Bool { get }
+    /// 是否使用虚线分隔（小票风格）
+    var useDashedDividers: Bool { get }
+    /// 是否使用等宽字体（小票风格）
+    var useMonospaceText: Bool { get }
     func headerFont(size: CGFloat) -> Font
     func groupTitleFont(size: CGFloat) -> Font
     func accentGradient(for colorScheme: ColorScheme) -> LinearGradient
@@ -103,9 +107,10 @@ extension AppUIStyle: UIStyleTokens {
                 ? Color(red: 0.07, green: 0.07, blue: 0.09)
                 : Color(red: 0.96, green: 0.96, blue: 0.97)
         case .flatDesign:
+            // 小票纸张色：暖白米色 / 深炭灰
             return colorScheme == .dark
-                ? Color(red: 0.11, green: 0.11, blue: 0.12)
-                : Color(red: 0.95, green: 0.95, blue: 0.97)
+                ? Color(red: 0.13, green: 0.13, blue: 0.12)
+                : Color(red: 0.95, green: 0.93, blue: 0.86)
         case .skeuomorphism:
             return colorScheme == .dark
                 ? Color(red: 0.12, green: 0.12, blue: 0.14)
@@ -133,7 +138,8 @@ extension AppUIStyle: UIStyleTokens {
             // 真玻璃：半透明 + 材质感
             return colorScheme == .dark ? Color.white.opacity(0.05) : Color.white.opacity(0.75)
         case .flatDesign:
-            return colorScheme == .dark ? Color(red: 0.16, green: 0.16, blue: 0.18) : .white
+            // 小票：无填充，纯纸张
+            return .clear
         case .skeuomorphism:
             return colorScheme == .dark
                 ? Color(red: 0.18, green: 0.18, blue: 0.20)
@@ -157,7 +163,8 @@ extension AppUIStyle: UIStyleTokens {
             // 1px 内折射边框：白色高光
             return colorScheme == .dark ? Color.white.opacity(0.1) : Color.white.opacity(0.9)
         case .flatDesign:
-            return .clear
+            // 小票虚线分隔色
+            return colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.25)
         case .skeuomorphism:
             return colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.15)
         case .materialDesign:
@@ -194,7 +201,7 @@ extension AppUIStyle: UIStyleTokens {
     var cornerRadius: CGFloat {
         switch self {
         case .ambientGlass: return 22
-        case .flatDesign: return 12
+        case .flatDesign: return 0  // 小票无圆角
         case .skeuomorphism: return 16
         case .materialDesign: return 16
         case .minimalism: return 0
@@ -206,7 +213,7 @@ extension AppUIStyle: UIStyleTokens {
     var sectionSpacing: CGFloat {
         switch self {
         case .ambientGlass: return 24
-        case .flatDesign: return 16
+        case .flatDesign: return 18  // 小票紧凑间距
         case .skeuomorphism: return 18
         case .materialDesign: return 16
         case .minimalism: return 32
@@ -218,7 +225,7 @@ extension AppUIStyle: UIStyleTokens {
     var groupSpacing: CGFloat {
         switch self {
         case .ambientGlass: return 14
-        case .flatDesign: return 12
+        case .flatDesign: return 8  // 小票紧凑行距
         case .skeuomorphism: return 14
         case .materialDesign: return 12
         case .minimalism: return 16
@@ -242,7 +249,7 @@ extension AppUIStyle: UIStyleTokens {
     var pagePadding: CGFloat {
         switch self {
         case .ambientGlass: return 20
-        case .flatDesign: return 16
+        case .flatDesign: return 24  // 小票宽边距，模拟纸张
         case .skeuomorphism: return 16
         case .materialDesign: return 16
         case .minimalism: return 24
@@ -258,12 +265,20 @@ extension AppUIStyle: UIStyleTokens {
         }
     }
 
+    var useDashedDividers: Bool {
+        self == .flatDesign
+    }
+
+    var useMonospaceText: Bool {
+        self == .flatDesign
+    }
+
     func headerFont(size: CGFloat) -> Font {
         switch self {
         case .ambientGlass, .glassmorphism, .boldStats:
             return .system(size: size, weight: .bold, design: .rounded)
         case .flatDesign:
-            return .system(size: size, weight: .bold, design: .default)
+            return .system(size: size, weight: .bold, design: .monospaced)
         case .skeuomorphism:
             return .system(size: size, weight: .heavy, design: .serif)
         case .materialDesign:
@@ -278,7 +293,7 @@ extension AppUIStyle: UIStyleTokens {
         case .ambientGlass, .glassmorphism, .boldStats:
             return .system(size: size, weight: .bold, design: .rounded)
         case .flatDesign:
-            return .system(size: size, weight: .semibold, design: .default)
+            return .system(size: size, weight: .semibold, design: .monospaced)
         case .skeuomorphism:
             return .system(size: size, weight: .bold, design: .serif)
         case .materialDesign:
@@ -367,7 +382,8 @@ struct StyledGlassCardModifier: ViewModifier {
         content
             .background(
                 Group {
-                    if style == .minimalism {
+                    if style == .minimalism || style == .flatDesign {
+                        // 小票/极简：无背景，无阴影，纯纸张
                         Color.clear
                     } else if style == .ambientGlass {
                         // 真玻璃折射：底色 + 内边框高光 + 内阴影 + 外扩散阴影
@@ -457,6 +473,63 @@ struct PressFeedbackStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(configuration.isPressed ? 0.9 : 1)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+// MARK: - 小票虚线分隔符
+
+struct ReceiptDivider: View {
+    @Environment(\.colorScheme) private var colorScheme
+    let style: AppUIStyle
+    var leadingIndent: CGFloat = 0
+
+    var body: some View {
+        if style.useDashedDividers {
+            // 小票虚线：一行 dash 字符
+            Text(String(repeating: "-", count: 48))
+                .font(.system(size: 11, weight: .regular, design: .monospaced))
+                .foregroundStyle(style.cardBorder(for: colorScheme))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, leadingIndent)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+        } else {
+            Divider()
+                .opacity(0.4)
+                .padding(.leading, leadingIndent)
+        }
+    }
+}
+
+// MARK: - 小票头部装饰
+
+struct ReceiptHeader: View {
+    let title: String
+    let style: AppUIStyle
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        if style.useDashedDividers {
+            VStack(spacing: 6) {
+                Text(String(repeating: "=", count: 48))
+                    .font(.system(size: 11, weight: .regular, design: .monospaced))
+                    .foregroundStyle(style.cardBorder(for: colorScheme))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                Text(title.uppercased())
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .tracking(1.5)
+                Text(String(repeating: "=", count: 48))
+                    .font(.system(size: 11, weight: .regular, design: .monospaced))
+                    .foregroundStyle(style.cardBorder(for: colorScheme))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+            }
+        } else {
+            EmptyView()
+        }
     }
 }
 
