@@ -22,6 +22,8 @@ struct BorderlessProfileView: View {
     @State private var areActivitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
     @State private var showSubscription = false
 
+    private var style: AppUIStyle { UIStyleManager.current }
+
     @AppStorage(Self.firstLaunchKey, store: UserDefaults(suiteName: appGroupID))
     private var firstLaunchTimestamp: Double = 0
 
@@ -31,11 +33,11 @@ struct BorderlessProfileView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AmbientGlass.background(for: colorScheme).ignoresSafeArea()
-                AmbientBlobs()
+                style.background(for: colorScheme).ignoresSafeArea()
+                AmbientBlobs(style: style)
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: AmbientGlass.sectionSpacing) {
+                    VStack(alignment: .leading, spacing: style.sectionSpacing) {
                         borderlessHeader
                         borderlessMemberRow
 
@@ -93,7 +95,7 @@ struct BorderlessProfileView: View {
 
                         borderlessFooter
                     }
-                    .padding(.horizontal, AmbientGlass.pagePadding)
+                    .padding(.horizontal, style.pagePadding)
                     .padding(.top, 12)
                     .padding(.bottom, 120)
                 }
@@ -146,9 +148,10 @@ struct BorderlessProfileView: View {
                 chevron
             }
             .padding(14)
-            .glassCard()
+            .styledGlassCard(style)
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 
     // MARK: - 分组
@@ -164,14 +167,14 @@ struct BorderlessProfileView: View {
             }
             .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: AmbientGlass.cornerRadius, style: .continuous)
-                    .fill(AmbientGlass.glassFill(for: colorScheme))
+                RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
+                    .fill(style.cardFill(for: colorScheme))
                     .overlay(
-                        RoundedRectangle(cornerRadius: AmbientGlass.cornerRadius, style: .continuous)
-                            .stroke(AmbientGlass.glassBorder(for: colorScheme), lineWidth: 0.5)
+                        RoundedRectangle(cornerRadius: style.cornerRadius, style: .continuous)
+                            .stroke(style.cardBorder(for: colorScheme), lineWidth: 0.5)
                     )
             )
-            .shadow(color: AmbientGlass.glassShadow(for: colorScheme), radius: 8, y: 3)
+            .shadow(color: style.cardShadow(for: colorScheme), radius: 8, y: 3)
         }
     }
 
@@ -189,6 +192,7 @@ struct BorderlessProfileView: View {
             borderlessRowContent(title: title, subtitle: subtitle, icon: icon, iconColor: iconColor, badge: badge)
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 
     private func borderlessActionRow(
@@ -246,7 +250,7 @@ struct BorderlessProfileView: View {
 
     private func iconBadge(systemName: String, color: Color) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: AmbientGlass.iconCornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: style.cornerRadius * 0.5, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [color.opacity(0.9), color.opacity(0.55)],

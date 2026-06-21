@@ -16,6 +16,8 @@ struct BorderlessContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query private var taskGroups: [TaskGroup]
 
+    private var style: AppUIStyle { UIStyleManager.current }
+
     @State private var activeFilter: TaskFilter = .all
     @State private var isPrivacyUnlocked = false
     @State private var isPrivacyUnlocking = false
@@ -187,11 +189,11 @@ struct BorderlessContentView: View {
 
     private var mainContent: some View {
         ZStack {
-            AmbientGlass.background(for: colorScheme).ignoresSafeArea()
-            AmbientBlobs()
+            style.background(for: colorScheme).ignoresSafeArea()
+            AmbientBlobs(style: style)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: AmbientGlass.sectionSpacing) {
+                VStack(alignment: .leading, spacing: style.sectionSpacing) {
                     borderlessHeader
                     borderlessFilterBar
 
@@ -203,7 +205,7 @@ struct BorderlessContentView: View {
                         mainContentBody
                     }
                 }
-                .padding(.horizontal, AmbientGlass.pagePadding)
+                .padding(.horizontal, style.pagePadding)
                 .padding(.top, 12)
                 .padding(.bottom, 120)
             }
@@ -283,7 +285,7 @@ struct BorderlessContentView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(AmbientGlass.accentGradient))
+                    .background(Circle().fill(style.accentGradient(for: colorScheme)))
                     .shadow(color: Color.blue.opacity(0.3), radius: 8, y: 4)
             }
             .buttonStyle(.plain)
@@ -316,12 +318,12 @@ struct BorderlessContentView: View {
                             Group {
                                 if isActive {
                                     Capsule()
-                                        .fill(AmbientGlass.accentGradientHorizontal)
+                                        .fill(style.accentGradient(for: colorScheme))
                                         .shadow(color: Color.blue.opacity(0.25), radius: 6, y: 3)
                                 } else {
                                     Capsule()
-                                        .fill(AmbientGlass.glassFill(for: colorScheme))
-                                        .overlay(Capsule().stroke(AmbientGlass.glassBorder(for: colorScheme), lineWidth: 0.5))
+                                        .fill(style.cardFill(for: colorScheme))
+                                        .overlay(Capsule().stroke(style.cardBorder(for: colorScheme), lineWidth: 0.5))
                                 }
                             }
                         )
@@ -352,13 +354,13 @@ struct BorderlessContentView: View {
                     .frame(width: 48, height: 48)
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(AmbientGlass.accentGradient, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .stroke(style.accentGradient(for: colorScheme), style: StrokeStyle(lineWidth: 5, lineCap: .round))
                     .frame(width: 48, height: 48)
                     .rotationEffect(.degrees(-90))
                     .animation(.easeInOut(duration: 0.4), value: progress)
                 Text("\(Int(progress * 100))%")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(AmbientGlass.accentGradientHorizontal)
+                    .foregroundStyle(style.accentGradient(for: colorScheme))
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(String(format: String(localized: "%lld/%lld 已完成"), Int64(completed), Int64(total)))
@@ -372,7 +374,7 @@ struct BorderlessContentView: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .glassCard()
+        .styledGlassCard(style)
     }
 
     // MARK: - 分组列表
@@ -391,7 +393,7 @@ struct BorderlessContentView: View {
     // MARK: - 无界分组
 
     private func borderlessGroupSection(group: TaskGroup, tasks: [TaskItem]) -> some View {
-        VStack(alignment: .leading, spacing: AmbientGlass.groupSpacing) {
+        VStack(alignment: .leading, spacing: style.groupSpacing) {
             // 分组标题
             HStack(spacing: 12) {
                 GroupIcon(name: group.iconName, size: 18, tint: .blue)
@@ -412,11 +414,11 @@ struct BorderlessContentView: View {
             }
         }
         .padding(16)
-        .glassCard()
+        .styledGlassCard(style)
     }
 
     private func borderlessTaskRow(task: TaskItem, group: TaskGroup) -> some View {
-        HStack(spacing: AmbientGlass.rowSpacing) {
+        HStack(spacing: style.rowSpacing) {
             // 渐变完成按钮
             Button {
                 withAnimation(.spring(duration: 0.25)) {
@@ -428,14 +430,14 @@ struct BorderlessContentView: View {
                 ZStack {
                     if task.isCompleted {
                         Circle()
-                            .fill(AmbientGlass.successGradient)
+                            .fill(style.successGradient(for: colorScheme))
                             .frame(width: 24, height: 24)
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)
                     } else {
                         Circle()
-                            .stroke(AmbientGlass.glassBorder(for: colorScheme), lineWidth: 1.5)
+                            .stroke(style.cardBorder(for: colorScheme), lineWidth: 1.5)
                             .frame(width: 24, height: 24)
                     }
                 }
@@ -496,8 +498,8 @@ struct BorderlessContentView: View {
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: AmbientGlass.smallCornerRadius, style: .continuous)
-                .fill(AmbientGlass.glassFill(for: colorScheme))
+            RoundedRectangle(cornerRadius: style.cornerRadius * 0.7, style: .continuous)
+                .fill(style.cardFill(for: colorScheme))
         )
     }
 
@@ -534,7 +536,7 @@ struct BorderlessContentView: View {
                     .frame(width: 80, height: 80)
                 Image(systemName: "tray")
                     .font(.system(size: 32))
-                    .foregroundStyle(AmbientGlass.accentGradient)
+                    .foregroundStyle(style.accentGradient(for: colorScheme))
             }
             VStack(spacing: 8) {
                 Text(String(localized: "还没有任务分组"))
@@ -562,7 +564,7 @@ struct BorderlessContentView: View {
                     .frame(width: 72, height: 72)
                 Image(systemName: "lock.fill")
                     .font(.system(size: 28))
-                    .foregroundStyle(AmbientGlass.accentGradient)
+                    .foregroundStyle(style.accentGradient(for: colorScheme))
             }
             Text(String(localized: "隐私空间已锁定"))
                 .font(.headline)
@@ -573,7 +575,7 @@ struct BorderlessContentView: View {
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
-                    .background(Capsule().fill(AmbientGlass.accentGradient))
+                    .background(Capsule().fill(style.accentGradient(for: colorScheme)))
                     .foregroundStyle(.white)
                     .shadow(color: Color.blue.opacity(0.3), radius: 8, y: 4)
             }
@@ -647,15 +649,15 @@ struct BorderlessContentView: View {
                         .frame(maxWidth: .infinity)
                         .background(
                             Capsule(style: .continuous)
-                                .fill(AmbientGlass.glassFill(for: colorScheme))
-                                .overlay(Capsule().stroke(AmbientGlass.glassBorder(for: colorScheme), lineWidth: 0.5))
+                                .fill(style.cardFill(for: colorScheme))
+                                .overlay(Capsule().stroke(style.cardBorder(for: colorScheme), lineWidth: 0.5))
                         )
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(16)
-        .glassCard()
+        .styledGlassCard(style)
     }
 
     // MARK: - 场景切换
@@ -740,6 +742,14 @@ struct BorderlessContentView: View {
             sortOrder: maxOrder + 1,
             tasks: []
         )
+        let firstTask = TaskItem(
+            title: String(localized: "新任务"),
+            isCompleted: false,
+            isPrivate: isPrivate,
+            taskType: .todo,
+            sortOrder: 0
+        )
+        newGroup.tasks.append(firstTask)
         modelContext.insert(newGroup)
         saveModelContext(modelContext, failureMessage: String(localized: "创建分组失败")) { message in
             dataErrorMessage = message
