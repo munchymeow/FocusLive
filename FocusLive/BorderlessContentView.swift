@@ -285,11 +285,23 @@ struct BorderlessContentView: View {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 38, height: 38)
                     .background(Circle().fill(style.accentGradient(for: colorScheme)))
-                    .shadow(color: Color.blue.opacity(0.3), radius: 8, y: 4)
+                    // 内折射高光
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.4), .white.opacity(0.05)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+                    .shadow(color: Color.blue.opacity(0.35), radius: 10, y: 5)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressFeedbackStyle())
             .accessibilityLabel(String(localized: "添加新分组"))
         }
     }
@@ -391,11 +403,11 @@ struct BorderlessContentView: View {
         }
     }
 
-    // MARK: - 无界分组
+    // MARK: - 无界分组（留白驱动，无卡片）
 
     private func borderlessGroupSection(group: TaskGroup, tasks: [TaskItem]) -> some View {
         VStack(alignment: .leading, spacing: style.groupSpacing) {
-            // 分组标题
+            // 分组标题：图标 + 名称 + 计数
             HStack(spacing: 12) {
                 GroupIcon(name: group.iconName, size: 18, tint: .blue)
                 Text(group.title)
@@ -406,11 +418,17 @@ struct BorderlessContentView: View {
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 4)
 
-            // 任务列表
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(tasks) { task in
+            // 任务列表：用分隔线而非卡片分隔
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
                     borderlessTaskRow(task: task, group: group)
+                    if index < tasks.count - 1 {
+                        Divider()
+                            .opacity(0.4)
+                            .padding(.leading, 42)
+                    }
                 }
             }
 
@@ -424,11 +442,10 @@ struct BorderlessContentView: View {
                 }
                 .foregroundStyle(style.accentColor)
                 .padding(.vertical, 8)
+                .padding(.horizontal, 4)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressFeedbackStyle())
         }
-        .padding(16)
-        .styledGlassCard(style)
     }
 
     private func addTaskButtonTitle(for group: TaskGroup) -> String {

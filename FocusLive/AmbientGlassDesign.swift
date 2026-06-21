@@ -98,9 +98,10 @@ extension AppUIStyle: UIStyleTokens {
     func background(for colorScheme: ColorScheme) -> Color {
         switch self {
         case .ambientGlass:
+            // 精炼色板：暖灰系 off-black/off-white，避免纯黑
             return colorScheme == .dark
-                ? Color(red: 0.06, green: 0.06, blue: 0.08)
-                : Color(red: 0.97, green: 0.97, blue: 0.99)
+                ? Color(red: 0.07, green: 0.07, blue: 0.09)
+                : Color(red: 0.96, green: 0.96, blue: 0.97)
         case .flatDesign:
             return colorScheme == .dark
                 ? Color(red: 0.11, green: 0.11, blue: 0.12)
@@ -129,7 +130,8 @@ extension AppUIStyle: UIStyleTokens {
     func cardFill(for colorScheme: ColorScheme) -> Color {
         switch self {
         case .ambientGlass:
-            return colorScheme == .dark ? Color.white.opacity(0.04) : Color.black.opacity(0.02)
+            // 真玻璃：半透明 + 材质感
+            return colorScheme == .dark ? Color.white.opacity(0.05) : Color.white.opacity(0.75)
         case .flatDesign:
             return colorScheme == .dark ? Color(red: 0.16, green: 0.16, blue: 0.18) : .white
         case .skeuomorphism:
@@ -152,7 +154,8 @@ extension AppUIStyle: UIStyleTokens {
     func cardBorder(for colorScheme: ColorScheme) -> Color {
         switch self {
         case .ambientGlass:
-            return colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
+            // 1px 内折射边框：白色高光
+            return colorScheme == .dark ? Color.white.opacity(0.1) : Color.white.opacity(0.9)
         case .flatDesign:
             return .clear
         case .skeuomorphism:
@@ -171,7 +174,8 @@ extension AppUIStyle: UIStyleTokens {
     func cardShadow(for colorScheme: ColorScheme) -> Color {
         switch self {
         case .ambientGlass:
-            return colorScheme == .dark ? Color.black.opacity(0.2) : Color.black.opacity(0.04)
+            // 扩散阴影：宽而淡，偏背景色调
+            return colorScheme == .dark ? Color.black.opacity(0.25) : Color.black.opacity(0.06)
         case .flatDesign:
             return .clear
         case .skeuomorphism:
@@ -189,7 +193,7 @@ extension AppUIStyle: UIStyleTokens {
 
     var cornerRadius: CGFloat {
         switch self {
-        case .ambientGlass: return 20
+        case .ambientGlass: return 22
         case .flatDesign: return 12
         case .skeuomorphism: return 16
         case .materialDesign: return 16
@@ -201,7 +205,7 @@ extension AppUIStyle: UIStyleTokens {
 
     var sectionSpacing: CGFloat {
         switch self {
-        case .ambientGlass: return 20
+        case .ambientGlass: return 24
         case .flatDesign: return 16
         case .skeuomorphism: return 18
         case .materialDesign: return 16
@@ -365,6 +369,38 @@ struct StyledGlassCardModifier: ViewModifier {
                 Group {
                     if style == .minimalism {
                         Color.clear
+                    } else if style == .ambientGlass {
+                        // 真玻璃折射：底色 + 内边框高光 + 内阴影 + 外扩散阴影
+                        RoundedRectangle(cornerRadius: cr, style: .continuous)
+                            .fill(style.cardFill(for: colorScheme))
+                            .overlay(
+                                // 1px 内折射边框：顶部高光
+                                RoundedRectangle(cornerRadius: cr, style: .continuous)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: colorScheme == .dark
+                                                ? [Color.white.opacity(0.12), Color.white.opacity(0.04)]
+                                                : [Color.white.opacity(0.9), Color.white.opacity(0.3)],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            )
+                            .overlay(
+                                // 内阴影：模拟玻璃边缘折射
+                                RoundedRectangle(cornerRadius: cr, style: .continuous)
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: colorScheme == .dark
+                                                ? [Color.black.opacity(0.15), Color.clear]
+                                                : [Color.black.opacity(0.04), Color.clear],
+                                            startPoint: .bottom,
+                                            endPoint: .top
+                                        ),
+                                        lineWidth: 1
+                                    )
+                            )
                     } else if style == .skeuomorphism {
                         RoundedRectangle(cornerRadius: cr, style: .continuous)
                             .fill(style.cardFill(for: colorScheme))
@@ -399,7 +435,8 @@ struct StyledGlassCardModifier: ViewModifier {
                     }
                 }
             )
-            .shadow(color: style.cardShadow(for: colorScheme), radius: style == .skeuomorphism ? 12 : 10, y: style == .skeuomorphism ? 6 : 4)
+            // 扩散阴影：宽而淡
+            .shadow(color: style.cardShadow(for: colorScheme), radius: style == .skeuomorphism ? 12 : 15, y: style == .skeuomorphism ? 6 : 5)
     }
 }
 
@@ -407,13 +444,28 @@ extension View {
     func styledGlassCard(_ style: AppUIStyle) -> some View {
         modifier(StyledGlassCardModifier(style: style))
     }
+
+    /// 触感反馈：按下时轻微下沉
+    func pressFeedback() -> some View {
+        self.buttonStyle(PressFeedbackStyle())
+    }
 }
 
-// MARK: - 环境光晕组件
+struct PressFeedbackStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+// MARK: - 环境光晕组件（带微妙浮动）
 
 struct AmbientBlobs: View {
     @Environment(\.colorScheme) private var colorScheme
     let style: AppUIStyle
+    @State private var animateBlobs = false
 
     init(style: AppUIStyle) {
         self.style = style
@@ -422,7 +474,7 @@ struct AmbientBlobs: View {
     var body: some View {
         if style.showAmbientBlobs {
             ZStack {
-                // 光晕 1：蓝青渐变
+                // 光晕 1：蓝青渐变（缓慢浮动）
                 Circle()
                     .fill(
                         LinearGradient(
@@ -436,8 +488,10 @@ struct AmbientBlobs: View {
                     .frame(width: 300, height: 300)
                     .blur(radius: 80)
                     .offset(x: -140, y: -220)
+                    .offset(y: animateBlobs ? 12 : -12)
+                    .opacity(animateBlobs ? 0.9 : 1)
 
-                // 光晕 2：薄荷蓝渐变
+                // 光晕 2：薄荷蓝渐变（反相浮动）
                 Circle()
                     .fill(
                         LinearGradient(
@@ -451,6 +505,8 @@ struct AmbientBlobs: View {
                     .frame(width: 280, height: 280)
                     .blur(radius: 70)
                     .offset(x: 140, y: 260)
+                    .offset(y: animateBlobs ? -12 : 12)
+                    .opacity(animateBlobs ? 0.8 : 1)
 
                 // 光晕 3：紫色点缀
                 if style == .ambientGlass || style == .glassmorphism {
@@ -459,10 +515,17 @@ struct AmbientBlobs: View {
                         .frame(width: 200, height: 200)
                         .blur(radius: 60)
                         .offset(x: 100, y: -60)
+                        .offset(x: animateBlobs ? 8 : -8)
                 }
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+            .onAppear {
+                // 8 秒周期缓慢浮动，营造空间呼吸感
+                withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) {
+                    animateBlobs = true
+                }
+            }
         }
     }
 }
