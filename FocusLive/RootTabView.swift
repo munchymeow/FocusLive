@@ -8,25 +8,22 @@
 import SwiftUI
 import SwiftData
 
-private let appGroupID = "group.com.QingTeng.FocusLive"
 private let liveActivityAppearanceKey = "liveActivitySystemAppearance"
 
 struct RootTabView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @Query private var taskGroups: [TaskGroup]
+    @AppStorage("labBorderlessUIEnabled", store: UserDefaults(suiteName: appGroupID))
+    private var borderlessUIEnabled = false
 
     var body: some View {
-        TabView {
-            ContentView()
-                .tabItem {
-                    Label("事项", systemImage: "checklist")
-                }
-
-            ProfileView()
-                .tabItem {
-                    Label("我的", systemImage: "person.fill")
-                }
+        Group {
+            if borderlessUIEnabled {
+                BorderlessRootTabView()
+            } else {
+                normalTabView
+            }
         }
         .onAppear {
             persistLiveActivityAppearance()
@@ -36,10 +33,32 @@ struct RootTabView: View {
             persistLiveActivityAppearance(newValue)
             syncLiveActivitiesForAppearanceChange()
         }
+        .onChange(of: borderlessUIEnabled) { _, _ in
+            syncLiveActivitiesForAppearanceChange()
+        }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             persistLiveActivityAppearance()
             syncLiveActivitiesForAppearanceChange()
+        }
+    }
+
+    private var normalTabView: some View {
+        TabView {
+            ContentView()
+                .tabItem {
+                    Label(String(localized: "事项"), systemImage: "checklist")
+                }
+
+            AISummaryView()
+                .tabItem {
+                    Label(String(localized: "AI 总结"), systemImage: "sparkles")
+                }
+
+            ProfileView()
+                .tabItem {
+                    Label(String(localized: "我的"), systemImage: "person.fill")
+                }
         }
     }
 
@@ -51,7 +70,7 @@ struct RootTabView: View {
 
     private func syncLiveActivitiesForAppearanceChange() {
         Task { @MainActor in
-            ActivityManager.shared.syncActivities(groups: taskGroups)
+            ActivityManager.shared.scheduleSyncActivities(groups: taskGroups)
         }
     }
 }

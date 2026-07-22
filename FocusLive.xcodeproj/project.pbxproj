@@ -20,6 +20,13 @@
 			remoteGlobalIDString = B8452A912F16767000422F38;
 			remoteInfo = FocusWidgetExtension;
 		};
+		C147D0B92951A14EBB9E55D4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B82D01E12F167598008D773E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B82D01E82F167598008D773E;
+			remoteInfo = FocusLive;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -37,11 +44,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B33C324220C43840C18709C6 /* FocusLiveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FocusLiveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B82D01E92F167598008D773E /* FocusLive.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FocusLive.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B8452A922F16767000422F38 /* FocusWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FocusWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B8452A942F16767000422F38 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		B8452A962F16767000422F38 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
-		B8452AAF2F1676CE00422F38 /* FocusWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FocusWidgetExtension.entitlements; sourceTree = "<group>"; };
+		B8452AAF2F1676CE00422F38 /* FocusWidgetExtension */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = FocusWidgetExtension; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -55,7 +63,10 @@
 		B8452ABB2F167A3F00422F38 /* Exceptions for "FocusLive" folder in "FocusWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				AppSupport.swift,
 				FocusAttributes.swift,
+				GroupIcon.swift,
+				IconSaxCatalog.swift,
 				TaskModel.swift,
 				ToggleTaskIntent.swift,
 			);
@@ -71,6 +82,11 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		A383AA036567CF478487E888 /* FocusLiveTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FocusLiveTests;
+			sourceTree = "<group>";
+		};
 		B82D01EB2F167598008D773E /* FocusLive */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -91,6 +107,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		A6F25A0DFA01EB452ABBCB86 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B82D01E62F167598008D773E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -113,7 +136,8 @@
 		B82D01E02F167598008D773E = {
 			isa = PBXGroup;
 			children = (
-				B8452AAF2F1676CE00422F38 /* FocusWidgetExtension.entitlements */,
+				B8452AAF2F1676CE00422F38 /* FocusWidgetExtension */,
+				A383AA036567CF478487E888 /* FocusLiveTests */,
 				B82D01EB2F167598008D773E /* FocusLive */,
 				B8452A982F16767000422F38 /* FocusWidget */,
 				B8452A932F16767000422F38 /* Frameworks */,
@@ -126,6 +150,7 @@
 			children = (
 				B82D01E92F167598008D773E /* FocusLive.app */,
 				B8452A922F16767000422F38 /* FocusWidgetExtension.appex */,
+				B33C324220C43840C18709C6 /* FocusLiveTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -142,6 +167,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		A4F12EBBCD33CB428C804333 /* FocusLiveTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9C5002278421B4E0883AB19 /* Build configuration list for PBXNativeTarget "FocusLiveTests" */;
+			buildPhases = (
+				A543F3C3BB0CB24FBFB0B4AD /* Sources */,
+				A6F25A0DFA01EB452ABBCB86 /* Frameworks */,
+				A7D371317B156D446192C4E2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B44115802C8AF44693B32A59 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A383AA036567CF478487E888 /* FocusLiveTests */,
+			);
+			name = FocusLiveTests;
+			productName = FocusLiveTests;
+			productReference = B33C324220C43840C18709C6 /* FocusLiveTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		B82D01E82F167598008D773E /* FocusLive */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B82D01F62F167599008D773E /* Build configuration list for PBXNativeTarget "FocusLive" */;
@@ -223,11 +269,19 @@
 			targets = (
 				B82D01E82F167598008D773E /* FocusLive */,
 				B8452A912F16767000422F38 /* FocusWidgetExtension */,
+				A4F12EBBCD33CB428C804333 /* FocusLiveTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		A7D371317B156D446192C4E2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B82D01E72F167598008D773E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -245,6 +299,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A543F3C3BB0CB24FBFB0B4AD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B82D01E52F167598008D773E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -262,6 +323,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		B44115802C8AF44693B32A59 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B82D01E82F167598008D773E /* FocusLive */;
+			targetProxy = C147D0B92951A14EBB9E55D4 /* PBXContainerItemProxy */;
+		};
 		B8452AA72F16767100422F38 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = B8452A912F16767000422F38 /* FocusWidgetExtension */;
@@ -270,6 +336,46 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		B16527B0B9669A40729FCF5D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2UYA2Z7QQP;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = FocusLiveTests;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.QingTeng.FocusLiveTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FocusLive.app/FocusLive";
+			};
+			name = Debug;
+		};
+		B2FBE2378D4FD94CF38E1E6D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2UYA2Z7QQP;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = FocusLiveTests;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.QingTeng.FocusLiveTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FocusLive.app/FocusLive";
+			};
+			name = Release;
+		};
 		B82D01F42F167599008D773E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -398,7 +504,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = FocusLive/FocusLive.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 2UYA2Z7QQP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -415,7 +521,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.2;
+				MARKETING_VERSION = 5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.QingTeng.FocusLive;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -435,7 +541,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = FocusLive/FocusLive.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 2UYA2Z7QQP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -452,7 +558,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 4.2;
+				MARKETING_VERSION = 5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.QingTeng.FocusLive;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -471,8 +577,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = FocusWidgetExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 2UYA2Z7QQP;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FocusWidget/Info.plist;
@@ -486,9 +593,10 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 4.1;
+				MARKETING_VERSION = 5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.QingTeng.FocusLive.FocusWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -505,8 +613,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = FocusWidgetExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_TEAM = 2UYA2Z7QQP;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = FocusWidget/Info.plist;
@@ -520,9 +629,10 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 4.1;
+				MARKETING_VERSION = 5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.QingTeng.FocusLive.FocusWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -536,6 +646,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		A9C5002278421B4E0883AB19 /* Build configuration list for PBXNativeTarget "FocusLiveTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B16527B0B9669A40729FCF5D /* Debug */,
+				B2FBE2378D4FD94CF38E1E6D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		B82D01E42F167598008D773E /* Build configuration list for PBXProject "FocusLive" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

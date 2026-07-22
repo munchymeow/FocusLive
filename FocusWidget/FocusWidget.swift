@@ -8,25 +8,16 @@
 import WidgetKit
 import SwiftUI
 
+
 private struct DailyMotivationQuote {
     let quote: String
     let author: String
 }
 
-private let dailyMotivationQuotes: [DailyMotivationQuote] = [
-    .init(quote: "慢一点没关系，持续向前就已经很好。", author: "去做"),
-    .init(quote: "先完成眼前这一件，小小推进也算胜利。", author: "去做"),
-    .init(quote: "把注意力还给当下，杂音就会慢慢退后。", author: "去做"),
-    .init(quote: "今天不必完美，但要保持在路上。", author: "去做"),
-    .init(quote: "专注不是紧绷，而是温和地回到手头的事。", author: "去做"),
-    .init(quote: "当你开始行动，焦虑就失去了一半力量。", author: "去做"),
-    .init(quote: "每一次认真完成，都会让明天更轻一点。", author: "去做"),
-    .init(quote: "先做最重要的一步，节奏自然会出现。", author: "去做"),
-    .init(quote: "允许自己慢，但不要停。", author: "去做"),
-    .init(quote: "今天的专注，会在未来变成底气。", author: "去做"),
-    .init(quote: "真正的进步，往往来自日复一日的小坚持。", author: "去做"),
-    .init(quote: "把复杂留给过程，把此刻留给这一件事。", author: "去做")
-]
+private let fallbackMotivationQuote = DailyMotivationQuote(
+    quote: "先完成眼前这一件，小小推进也算胜利。",
+    author: "去做"
+)
 
 enum WidgetDisplayData {
     case motivation(quote: String, author: String)
@@ -69,14 +60,39 @@ struct Provider: AppIntentTimelineProvider {
     }
 
     private func motivationDisplayData(for date: Date) -> WidgetDisplayData {
-        let quote = quoteForDate(date)
+        let quote = sharedMotivationQuote() ?? fallbackMotivationQuote
         return .motivation(quote: quote.quote, author: quote.author)
     }
 
-    private func quoteForDate(_ date: Date) -> DailyMotivationQuote {
-        let dayIndex = Int(Calendar.current.startOfDay(for: date).timeIntervalSinceReferenceDate / 86_400)
-        let safeIndex = abs(dayIndex) % dailyMotivationQuotes.count
-        return dailyMotivationQuotes[safeIndex]
+    private func sharedMotivationQuote() -> DailyMotivationQuote? {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else { return nil }
+
+        if defaults.object(forKey: useCustomMotivationQuoteKey) as? Bool ?? false {
+            let quote = trimmed(defaults.string(forKey: customMotivationQuoteKey))
+            if !quote.isEmpty {
+                return DailyMotivationQuote(
+                    quote: quote,
+                    author: displayAuthor(defaults.string(forKey: customMotivationAuthorKey))
+                )
+            }
+        }
+
+        let quote = trimmed(defaults.string(forKey: currentMotivationQuoteKey))
+        guard !quote.isEmpty else { return nil }
+
+        return DailyMotivationQuote(
+            quote: quote,
+            author: displayAuthor(defaults.string(forKey: currentMotivationAuthorKey))
+        )
+    }
+
+    private func displayAuthor(_ raw: String?) -> String {
+        let author = trimmed(raw)
+        return author.isEmpty ? "去做" : author
+    }
+
+    private func trimmed(_ raw: String?) -> String {
+        raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 }
 

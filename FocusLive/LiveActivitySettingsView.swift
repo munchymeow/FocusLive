@@ -7,8 +7,9 @@
 
 import SwiftUI
 import SwiftData
+import PhotosUI
 
-/// 实时活动展示设置视图
+/// 实时活动展示设置视图（已优化结构与实时预览）
 struct LiveActivitySettingsView: View {
     private static let appGroupID = "group.com.QingTeng.FocusLive"
     private static let displayCountKey = "liveActivityMaxCount"
@@ -27,7 +28,7 @@ struct LiveActivitySettingsView: View {
     @AppStorage(Self.opacityKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var backgroundOpacity: Double = 0.0
 
-    /// 字体大小缩放比例 (0.7 ~ 2.0，默认 1.0)
+    /// 字体大小缩放比例 (0.7 ~ 2.0，默认 1.5)
     @AppStorage(Self.fontSizeKey, store: UserDefaults(suiteName: Self.appGroupID))
     private var fontSizeScale: Double = 1.5
 
@@ -50,9 +51,18 @@ struct LiveActivitySettingsView: View {
     /// 每日鼓励开关
     @AppStorage("dailyMotivationEnabled", store: UserDefaults(suiteName: appGroupID))
     private var dailyMotivationEnabled: Bool = true
+
+    /// AI 总结开关
+    @AppStorage("aiSummaryEnabled", store: UserDefaults(suiteName: appGroupID))
+    private var aiSummaryEnabled: Bool = false
+
+    @State private var selectedPhotoItem: PhotosPickerItem? = nil
+    @State private var previewWallpaperImage: UIImage? = nil
     
     @Query private var taskGroups: [TaskGroup]
     @State private var selectedGroupIDs: Set<String> = []
+
+    @Environment(\.colorScheme) private var colorScheme
 
     private enum LockScreenBackgroundMode: String, CaseIterable, Identifiable {
         case transparent
@@ -114,70 +124,89 @@ struct LiveActivitySettingsView: View {
             .filter { !($0.isPrivate ?? false) }
             .sorted { ($0.sortOrder ?? 0) < ($1.sortOrder ?? 0) }
     }
+
+    /// 计算实时预览文本颜色
+    private var previewTextColor: Color {
+        switch fontColorName {
+        case "white":  return .white
+        case "black":  return .black
+        case "yellow": return .yellow
+        case "orange": return .orange
+        case "green":  return .green
+        case "blue":   return .blue
+        case "red":    return .red
+        case "pink":   return .pink
+        case "purple": return .purple
+        case "cyan":   return .cyan
+        default:       return backgroundMode == .opaque ? (colorScheme == .dark ? .white : .black) : .white
+        }
+    }
     
     var body: some View {
         Form {
+            // MARK: 1. 实时预览区
             Section {
-                if selectableGroups.isEmpty {
-                    Text("暂无可显示的分组")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(selectableGroups) { group in
-                        Toggle(isOn: bindingForGroup(group)) {
-                            HStack(spacing: 10) {
-                                Text(group.iconName)
-                                Text(group.title)
-                                    .lineLimit(1)
-                            }
+                livePreviewCard
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+
+                HStack {
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        Label(previewWallpaperImage == nil ? "导入相册壁纸预览" : "更换壁纸", systemImage: "photo")
+                            .font(.subheadline.weight(.medium))
+                    }
+
+                    if previewWallpaperImage != nil {
+                        Spacer()
+                        Button(role: .destructive) {
+                            previewWallpaperImage = nil
+                            UserDefaults(suiteName: Self.appGroupID)?.removeObject(forKey: "customWallpaperData")
+                        } label: {
+                            Label("清除壁纸", systemImage: "trash")
+                                .font(.subheadline)
                         }
                     }
                 }
             } header: {
-                Text("锁屏显示分组")
+                Label("锁屏实时卡片预览", systemImage: "eye.fill")
             } footer: {
-                Text(isProUser ? "选择显示分组后，仅这些分组会出现在锁屏实时活动。" : "免费版仅可选择 1 个分组显示在锁屏实时活动。")
+                Text("可导入自定相册壁纸，测试卡片在真实锁屏背景下的透明度与文字可视度。")
             }
-            
+
+            // MARK: 2. 外观与展示配置
             Section {
+                // 背景模式
+                Picker("卡片背景", selection: backgroundModeBinding) {
+                    ForEach(LockScreenBackgroundMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                // 显示条数
                 Stepper(value: $displayCount, in: 1...maxDisplayCount) {
                     HStack {
-                        Text("显示条数")
+                        Label("显示条数", systemImage: "list.number")
                         Spacer()
-                        Text("\(displayCount)")
+                        Text("\(displayCount) 条")
                             .foregroundStyle(.secondary)
                     }
                 }
 
                 if displayCount > 4 {
-                    HStack(alignment: .top, spacing: 6) {
+                    HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption2)
                             .foregroundStyle(.orange)
-                        Text("建议显示 4 条以内，条数过多可能导致锁屏卡片内容被遮挡裁剪。")
+                        Text("建议 4 条以内，过多可能导致锁屏遮挡。")
                             .font(.caption2)
                             .foregroundStyle(.orange)
                     }
                 }
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("卡片背景")
 
-                    Picker("卡片背景", selection: backgroundModeBinding) {
-                        ForEach(LockScreenBackgroundMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Text("透明模式默认白字；不透明模式会根据浅色白底黑字、深色黑底白字自动切换。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
+                // 字体大小
+                VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("任务字体大小")
+                        Label("字体大小", systemImage: "textformat.size")
                         Spacer()
                         Text(String(format: "%.0f%%", fontSizeScale * 100))
                             .font(.caption)
@@ -187,28 +216,25 @@ struct LiveActivitySettingsView: View {
                     Slider(value: $fontSizeScale, in: 0.7...2.0, step: 0.05) {
                         Text("字体大小")
                     } minimumValueLabel: {
-                        Text("小")
-                            .font(.caption2)
+                        Text("小").font(.caption2)
                     } maximumValueLabel: {
-                        Text("大")
-                            .font(.caption2)
+                        Text("大").font(.caption2)
                     }
                 }
-                .onChange(of: fontSizeScale) { _, _ in
-                    syncLiveActivities()
-                }
 
+                // 任务字体颜色（已修复遮挡 bug）
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("任务字体颜色")
+                        Label("任务字体颜色", systemImage: "paintpalette")
                         Spacer()
                         Text(fontColorDisplayName)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
+                    // 水平滚动颜色选盘：增加了左右/上下 Padding，防止“默认(A)”最左侧环形边框和阴影被裁剪
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
+                        HStack(spacing: 12) {
                             ForEach(colorOptions, id: \.name) { option in
                                 Button {
                                     fontColorName = option.name
@@ -220,12 +246,13 @@ struct LiveActivitySettingsView: View {
                                             .frame(width: 32, height: 32)
                                             .overlay(
                                                 Circle()
-                                                    .stroke(Color.accentColor, lineWidth: fontColorName == option.name ? 3 : 0)
+                                                    .stroke(Color.accentColor, lineWidth: fontColorName == option.name ? 2.5 : 0)
                                             )
-                                            .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1)
+                                            .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
+
                                         if option.name == "default" {
                                             Text("A")
-                                                .font(.system(size: 14, weight: .bold))
+                                                .font(.system(size: 13, weight: .bold))
                                                 .foregroundStyle(.primary)
                                         }
                                     }
@@ -233,66 +260,86 @@ struct LiveActivitySettingsView: View {
                                 .buttonStyle(.plain)
                             }
                         }
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 6)
                     }
                 }
-                .onChange(of: fontColorName) { _, _ in
+
+                // 完成状态与灵动岛
+                Toggle(isOn: $showCompletedTasks) {
+                    Label("显示已完成事项", systemImage: "checkmark.circle")
+                }
+
+                Toggle(isOn: $dynamicIslandEnabled) {
+                    Label("显示灵动岛", systemImage: "sparkles")
+                }
+            } header: {
+                Text("外观样式")
+            } footer: {
+                Text("iOS 不支持仅保留锁屏而彻底关闭灵动岛；关闭“显示灵动岛”后会自动最小化展示。")
+            }
+
+            // MARK: 3. 锁屏显示分组选择
+            Section {
+                if selectableGroups.isEmpty {
+                    Text("暂无可显示的分组")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(selectableGroups) { group in
+                        Toggle(isOn: bindingForGroup(group)) {
+                            HStack(spacing: 10) {
+                                GroupIcon(name: group.iconName, size: 14)
+                                Text(group.title)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("锁屏显示分组")
+            } footer: {
+                Text(isProUser ? "可自由勾选多分组显示在锁屏实时活动。" : "免费版最多可选择 1 个分组显示在锁屏实时活动。")
+            }
+
+            // MARK: 4. 高级拓展与 AI 总结
+            Section(header: Text("高级功能")) {
+                Toggle(isOn: $aiSummaryEnabled) {
+                    Label("AI 总结锁屏卡片", systemImage: "sparkles")
+                }
+                .onChange(of: aiSummaryEnabled) { _, _ in
                     syncLiveActivities()
                 }
 
-                Toggle("显示灵动岛", isOn: $dynamicIslandEnabled)
-                    .onChange(of: dynamicIslandEnabled) { _, _ in
-                        syncLiveActivities()
-                    }
-
-                Toggle("显示已完成事项", isOn: $showCompletedTasks)
-                    .onChange(of: showCompletedTasks) { _, _ in
-                        syncLiveActivities()
-                    }
-            } header: {
-                Text("锁屏实时活动")
-            } footer: {
-                Text("默认任务文字会根据卡片背景与系统深浅色自动切换黑白；手动选色会覆盖默认效果。关闭“显示灵动岛”后，锁屏卡片保持正常，灵动岛会尽量不展示内容。")
-            }
-            
-            if isProUser {
-                Section {
-                    Toggle("智能提醒", isOn: $smartReminderEnabled)
-                        .onChange(of: smartReminderEnabled) { _, newValue in
-                            if newValue {
-                                Task {
-                                    await NotificationManager.shared.requestPermission()
-                                }
-                            }
-                            syncLiveActivities()
-                        }
-
-                } header: {
-                    Text("高级功能")
-                } footer: {
-                    Text("开启后，系统会在任务计划时间前 2 小时自动发送本地通知提醒，同时锁屏页优先显示最近截止的任务。")
-                }
-            }
-            
-            Section(header: Text("每日鼓励")) {
-                Toggle("每日鼓励", isOn: $dailyMotivationEnabled)
-                    .onChange(of: dailyMotivationEnabled) { _, _ in
-                        syncLiveActivities()
-                    }
-                    
-                    if dailyMotivationEnabled {
-                        Text("开启后，每日鼓励会显示在首页“全部”页底部，并同步到锁屏每日鼓励卡片。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                if isProUser {
+                    Toggle(isOn: $smartReminderEnabled) {
+                        Label("智能提醒", systemImage: "bell.badge")
                     }
                 }
+
+                Toggle(isOn: $dailyMotivationEnabled) {
+                    Label("每日鼓励", systemImage: "quote.bubble")
+                }
+            }
         }
         .navigationTitle("锁屏卡片设置")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             normalizeSettings()
             loadSelectedGroupsIfNeeded()
+            loadWallpaperImageIfNeeded()
             syncLiveActivities()
+        }
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            Task {
+                if let data = try? await newItem?.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    previewWallpaperImage = image
+                    if let compressed = image.jpegData(compressionQuality: 0.7) {
+                        UserDefaults(suiteName: Self.appGroupID)?.set(compressed, forKey: "customWallpaperData")
+                    }
+                }
+            }
         }
         .onChange(of: isProUser) { _, _ in
             normalizeSettings()
@@ -304,6 +351,29 @@ struct LiveActivitySettingsView: View {
         .onChange(of: displayCount) { _, _ in
             syncLiveActivities()
         }
+        .onChange(of: fontSizeScale) { _, _ in
+            syncLiveActivities()
+        }
+        .onChange(of: fontColorName) { _, _ in
+            syncLiveActivities()
+        }
+        .onChange(of: showCompletedTasks) { _, _ in
+            syncLiveActivities()
+        }
+        .onChange(of: dynamicIslandEnabled) { _, _ in
+            syncLiveActivities()
+        }
+        .onChange(of: smartReminderEnabled) { _, newValue in
+            if newValue {
+                Task {
+                    await NotificationManager.shared.requestPermission()
+                }
+            }
+            syncLiveActivities()
+        }
+        .onChange(of: dailyMotivationEnabled) { _, _ in
+            syncLiveActivities()
+        }
         .onChange(of: backgroundOpacity) { _, _ in
             syncLiveActivities()
         }
@@ -311,10 +381,108 @@ struct LiveActivitySettingsView: View {
             syncLiveActivities()
         }
     }
+
+    // MARK: - 实时模拟预览卡片
+
+    private var livePreviewCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // 自定义相册壁纸模组下的模拟锁屏时钟
+            if previewWallpaperImage != nil {
+                VStack(spacing: 2) {
+                    Text("09:41")
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 2)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 6)
+                .padding(.bottom, 4)
+            }
+
+            HStack {
+                HStack(spacing: 6) {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("示例待办")
+                        .font(.system(size: 13 * CGFloat(fontSizeScale), weight: .bold))
+                }
+                Spacer()
+                Text("1/3")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(previewTextColor)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: "circle")
+                        .font(.system(size: 11))
+                    Text("完成项目代码重构")
+                        .font(.system(size: 12 * CGFloat(fontSizeScale), weight: .medium))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(previewTextColor)
+
+                HStack(spacing: 6) {
+                    Image(systemName: "circle")
+                        .font(.system(size: 11))
+                    Text("优化锁屏卡片设置页")
+                        .font(.system(size: 12 * CGFloat(fontSizeScale), weight: .medium))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(previewTextColor)
+
+                if showCompletedTasks {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.green)
+                        Text("体验锁屏实时活动")
+                            .font(.system(size: 12 * CGFloat(fontSizeScale), weight: .medium))
+                            .strikethrough()
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(previewTextColor.opacity(0.6))
+                }
+            }
+        }
+        .padding(14)
+        .background {
+            if backgroundMode == .opaque {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(colorScheme == .dark ? Color.black : Color.white)
+                    .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(colorScheme == .dark ? 0.12 : 0.2))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                    )
+            }
+        }
+        .padding(previewWallpaperImage != nil ? 14 : 0)
+        .background {
+            if let wallpaper = previewWallpaperImage {
+                ZStack {
+                    Image(uiImage: wallpaper)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                    Color.black.opacity(0.18)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
+        }
+    }
+    
+    private func loadWallpaperImageIfNeeded() {
+        if let data = UserDefaults(suiteName: Self.appGroupID)?.data(forKey: "customWallpaperData"),
+           let image = UIImage(data: data) {
+            previewWallpaperImage = image
+        }
+    }
     
     /// 规范化设置范围，防止异常值
-    /// - Parameters: 无
-    /// - Returns: Void
     private func normalizeSettings() {
         if displayCount < 1 {
             displayCount = 1
@@ -326,8 +494,6 @@ struct LiveActivitySettingsView: View {
     }
 
     /// 获取分组选择绑定
-    /// - Parameter group: 任务分组
-    /// - Returns: Toggle 的绑定值
     private func bindingForGroup(_ group: TaskGroup) -> Binding<Bool> {
         Binding(
             get: { selectedGroupIDs.contains(group.id.uuidString) },
@@ -338,7 +504,6 @@ struct LiveActivitySettingsView: View {
     }
     
     /// 初始化分组选择数据
-    /// - Returns: Void
     private func loadSelectedGroupsIfNeeded() {
         guard let defaults = UserDefaults(suiteName: Self.appGroupID) else { return }
         if let stored = defaults.array(forKey: Self.allowedGroupIDsKey) as? [String] {
@@ -351,7 +516,6 @@ struct LiveActivitySettingsView: View {
     }
     
     /// 根据当前分组列表同步选择状态
-    /// - Returns: Void
     private func syncSelectionWithGroups() {
         let validIDs = Set(selectableGroups.map { $0.id.uuidString })
         selectedGroupIDs = selectedGroupIDs.intersection(validIDs)
@@ -360,10 +524,6 @@ struct LiveActivitySettingsView: View {
     }
     
     /// 更新分组选择状态并同步
-    /// - Parameters:
-    ///   - group: 任务分组
-    ///   - isSelected: 是否选择
-    /// - Returns: Void
     private func updateSelection(for group: TaskGroup, isSelected: Bool) {
         let groupID = group.id.uuidString
         if isSelected {
@@ -381,7 +541,6 @@ struct LiveActivitySettingsView: View {
     }
     
     /// 强制免费版分组选择上限
-    /// - Returns: Void
     private func enforceSelectionLimit() {
         guard !isProUser else { return }
         if selectedGroupIDs.count > 1 {
@@ -393,24 +552,21 @@ struct LiveActivitySettingsView: View {
     }
     
     /// 获取默认选择分组列表
-    /// - Returns: 分组 ID 列表
     private func defaultSelectedGroupIDs() -> [String] {
         let ids = selectableGroups.map { $0.id.uuidString }
         return isProUser ? ids : Array(ids.prefix(1))
     }
     
     /// 保存分组选择结果
-    /// - Returns: Void
     private func persistSelectedGroupIDs() {
         guard let defaults = UserDefaults(suiteName: Self.appGroupID) else { return }
         defaults.set(Array(selectedGroupIDs), forKey: Self.allowedGroupIDsKey)
     }
     
     /// 触发 Live Activity 刷新以应用最新设置
-    /// - Returns: Void
     private func syncLiveActivities() {
         Task { @MainActor in
-            ActivityManager.shared.syncActivities(groups: taskGroups)
+            ActivityManager.shared.scheduleSyncActivities(groups: taskGroups)
         }
     }
 }

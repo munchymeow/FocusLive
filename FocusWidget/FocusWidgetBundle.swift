@@ -12,6 +12,7 @@ import SwiftUI
 struct FocusWidgetBundle: WidgetBundle {
     var body: some Widget {
         FocusWidget()
+        FocusTaskWidget()    // 主屏任务列表 Widget
         FocusWidgetControl()
         FocusActivityWidget()  // Live Activity 视图
     }
