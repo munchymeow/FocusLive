@@ -238,7 +238,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         fireDate: Date,
         repeats: Bool = false,
         dateComponents: DateComponents? = nil,
-        categoryID: String = notificationCategoryID
+        categoryID: String = "TASK_REMINDER"
     ) {
         let content = UNMutableNotificationContent()
         content.title = title

@@ -47,12 +47,6 @@ struct TaskWidgetEntry: TimelineEntry {
 // MARK: - Data Fetching
 
 /// 判断字符串是否为 SF Symbol 名
-private func isSFSymbolName(_ name: String) -> Bool {
-    guard !name.isEmpty else { return false }
-    let pattern = "^[a-z][a-z0-9._-]*$"
-    return name.range(of: pattern, options: .regularExpression) != nil
-}
-
 private func fetchWidgetGroups() -> [WidgetGroup] {
     guard let containerURL = FileManager.default.containerURL(
         forSecurityApplicationGroupIdentifier: appGroupID
@@ -178,14 +172,7 @@ struct TaskWidgetEntryView: View {
         VStack(alignment: .leading, spacing: 10) {
             // Header
             HStack(spacing: 8) {
-                if isSFSymbolName(group.iconName) {
-                    Image(systemName: group.iconName)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                } else {
-                    Text(group.iconName)
-                        .font(.system(size: 16))
-                }
+                GroupIcon(name: group.iconName, size: 14, tint: Color.accentColor, showsChrome: false)
                 Text(group.title)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
@@ -193,6 +180,7 @@ struct TaskWidgetEntryView: View {
                 Text("\(group.completedCount)/\(group.totalCount)")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .contentTransition(.numericText(countsDown: false))
             }
 
             // Progress bar
@@ -307,14 +295,7 @@ struct TaskWidgetEntryView: View {
     private func groupSection(_ group: WidgetGroup, maxTasks: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                if isSFSymbolName(group.iconName) {
-                    Image(systemName: group.iconName)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
-                } else {
-                    Text(group.iconName)
-                        .font(.system(size: 13))
-                }
+                GroupIcon(name: group.iconName, size: 11, tint: Color.accentColor, showsChrome: false)
                 Text(group.title)
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
@@ -322,6 +303,7 @@ struct TaskWidgetEntryView: View {
                 Text("\(group.completedCount)/\(group.totalCount)")
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .contentTransition(.numericText(countsDown: false))
             }
 
             ForEach(group.tasks.prefix(maxTasks)) { task in

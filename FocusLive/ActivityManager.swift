@@ -181,6 +181,9 @@ final class ActivityManager {
         // 根据每日鼓励开关与分组选择同步励志名言活动
         checkAndCreateMotivationActivityIfNeeded()
 
+        // 同步 AI 总结锁屏 Live Activity
+        checkAndCreateAISummaryActivityIfNeeded()
+
         // 刷新主屏幕小组件
         WidgetCenter.shared.reloadAllTimelines()
     }
@@ -487,7 +490,9 @@ final class ActivityManager {
             "compact=\((defaults?.object(forKey: "compactViewEnabled") as? Bool) ?? false)",
             "dynamicIsland=\((defaults?.object(forKey: "liveActivityDynamicIslandEnabled") as? Bool) ?? false)",
             "appearance=\(defaults?.string(forKey: "liveActivitySystemAppearance") ?? "system")",
-            "pro=\(currentProStatus())"
+            "pro=\(currentProStatus())",
+            "labEnabled=\(defaults?.bool(forKey: "labBorderlessUIEnabled") ?? false)",
+            "uiStyle=\(currentSelectedUIStyleRawValue())"
         ]
         return Double(stableHash(parts.joined(separator: "|")))
     }
@@ -753,8 +758,62 @@ final class ActivityManager {
         return text.trimmingCharacters(in: CharacterSet(charactersIn: "“”\""))
     }
     
+    /// 检查并创建/更新 AI 总结 Live Activity
+    func checkAndCreateAISummaryActivityIfNeeded() {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
+        let isEnabled = defaults.bool(forKey: "aiSummaryEnabled")
+        let summaryText = defaults.string(forKey: aiSummaryTextKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        
+        let aiActivities = Activity<FocusAttributes>.activities.filter {
+            $0.attributes.groupID.hasPrefix("ai_summary")
+        }
+        
+        guard isEnabled && !summaryText.isEmpty else {
+            for activity in aiActivities {
+                Task {
+                    await activity.end(nil, dismissalPolicy: .immediate)
+                }
+            }
+            return
+        }
+
+        let aiID = "ai_summary"
+        let contentState = FocusAttributes.ContentState(
+            groupTitle: "AI 总结",
+            groupIcon: "sparkles",
+            tasks: [
+                TaskItemSnapshot(
+                    id: "summary",
+                    title: summaryText,
+                    isCompleted: false
+                )
+            ],
+            renderVersion: currentRenderVersion(),
+            fontColorName: currentFontColorName()
+        )
+
+        if let existingActivity = aiActivities.first {
+            guard shouldUpdateActivity(from: existingActivity.content.state, to: contentState) else { return }
+            Task {
+                await existingActivity.update(ActivityContent(state: contentState, staleDate: nil))
+            }
+        } else {
+            let attributes = FocusAttributes(groupID: aiID)
+            do {
+                _ = try Activity.request(
+                    attributes: attributes,
+                    content: .init(state: contentState, staleDate: nil),
+                    pushType: nil
+                )
+                debugLog("✨ AI 总结 Live Activity 已创建: \(summaryText)")
+            } catch {
+                debugLog("⚠️ 创建 AI 总结 Activity 失败: \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// 是否为特殊 Activity（不是普通分组 Activity）
     private func isSpecialActivity(groupID: String) -> Bool {
-        groupID.hasPrefix("motivation_") || groupID.hasPrefix("smart_reminder_")
+        groupID.hasPrefix("motivation_") || groupID.hasPrefix("smart_reminder_") || groupID.hasPrefix("ai_summary")
     }
 }

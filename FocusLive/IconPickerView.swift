@@ -2,7 +2,7 @@
 //  IconPickerView.swift
 //  FocusLive
 //
-//  双模式图标选择器：SF Symbols（默认）+ Emoji
+//  三模式图标选择器：SF Symbols（默认）+ IconSax + Emoji
 //
 
 import SwiftUI
@@ -17,6 +17,7 @@ struct IconPickerView: View {
 
     private enum IconTab: String, CaseIterable {
         case sfSymbols = "SF 图标"
+        case iconSax = "IconSax"
         case emoji = "Emoji"
     }
 
@@ -38,6 +39,8 @@ struct IconPickerView: View {
 
                 if selectedTab == .sfSymbols {
                     sfSymbolsContent
+                } else if selectedTab == .iconSax {
+                    iconSaxContent
                 } else {
                     emojiContent
                 }
@@ -65,7 +68,7 @@ struct IconPickerView: View {
                     ForEach(SFSymbolCatalog.categories.indices, id: \.self) { index in
                         let category = SFSymbolCatalog.categories[index]
                         Button(action: {
-                            withAnimation(.easeInOut(duration: 0.15)) {
+                            withAnimation(.easeOut(duration: 0.15)) {
                                 selectedCategoryIndex = index
                             }
                         }) {
@@ -109,6 +112,69 @@ struct IconPickerView: View {
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
                                         .stroke(selectedIcon == symbolName ? Color.blue : Color.clear, lineWidth: 2)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding()
+            }
+        }
+    }
+
+    // MARK: - IconSax Tab
+
+    private var iconSaxContent: some View {
+        VStack(spacing: 0) {
+            // 分类标签栏
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(IconSaxCatalog.categories.indices, id: \.self) { index in
+                        let category = IconSaxCatalog.categories[index]
+                        Button(action: {
+                            withAnimation(.easeOut(duration: 0.15)) {
+                                selectedCategoryIndex = index
+                            }
+                        }) {
+                            Text(category.name)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(selectedCategoryIndex == index ? .white : .primary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(selectedCategoryIndex == index ? Color.blue : Color.gray.opacity(0.12))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+
+            Divider()
+
+            // IconSax 网格
+            ScrollView {
+                let category = IconSaxCatalog.categories[selectedCategoryIndex]
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(category.icons, id: \.self) { iconKey in
+                        let full = IconSaxCatalog.resourceName(for: iconKey)
+                        Button(action: {
+                            selectedIcon = full
+                            onDismiss()
+                            dismiss()
+                        }) {
+                            IconSaxView(name: full, size: 24, tint: selectedIcon == full ? .blue : .primary)
+                                .frame(width: 52, height: 52)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(selectedIcon == full ? Color.blue.opacity(0.15) : Color.gray.opacity(0.08))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(selectedIcon == full ? Color.blue : Color.clear, lineWidth: 2)
                                 )
                         }
                         .buttonStyle(.plain)

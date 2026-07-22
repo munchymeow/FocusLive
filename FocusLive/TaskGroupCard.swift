@@ -8,6 +8,7 @@ import SwiftData
 
 struct TaskGroupCard: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var group: TaskGroup
     let displayTasks: [TaskItem]
     let modelContext: ModelContext
@@ -20,7 +21,7 @@ struct TaskGroupCard: View {
     var canMoveDown: Bool = true
 
     @Query private var allGroups: [TaskGroup]
-    
+
     @State private var isExpanded = true
     @State private var isEditingTitle = false
     @State private var editedTitle = ""
@@ -104,17 +105,24 @@ struct TaskGroupCard: View {
                         Image(systemName: "checkmark.seal.fill")
                             .font(.system(size: 14))
                             .foregroundStyle(.green)
+                            // 全部完成时一次回弹 —— 罕见高情绪时刻的 delight。
+                            .symbolEffect(.bounce, value: progress == 1)
                     }
                     if totalCount > 0 {
                         Text("\(completedCount)/\(totalCount)")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(progress == 1 ? .green : .blue)
+                            // 数字滚动而非跳变；高频勾选下顺滑可读。
+                            .contentTransition(.numericText(countsDown: false))
+                            .animation(.snappy(duration: 0.2), value: completedCount)
                     } else {
                         HStack(spacing: 2) {
                             Image(systemName: "bell.fill")
                                 .font(.system(size: 12))
                             Text("\(reminderCount)")
                                 .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .contentTransition(.numericText(countsDown: false))
+                                .animation(.snappy(duration: 0.2), value: reminderCount)
                         }
                         .foregroundStyle(.orange)
                     }
@@ -138,7 +146,7 @@ struct TaskGroupCard: View {
                     }
                     .buttonStyle(.plain)
                 } else {
-                    Button(action: { withAnimation(.spring(duration: 0.3)) { isExpanded.toggle() } }) {
+                    Button(action: { withAnimation(MotionTokens.groupExpand(reduceMotion: reduceMotion)) { isExpanded.toggle() } }) {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.secondary)

@@ -46,7 +46,7 @@ enum SchemaV1: VersionedSchema {
             tasks: [TaskItemV1] = [],
             scheduledTime: Date? = nil,
             reminderTime: Date? = nil,
-            reminderType: ReminderType? = .none,
+            reminderType: ReminderType? = ReminderType.none,
             priority: Priority? = .medium
         ) {
             self.id = id
@@ -89,10 +89,10 @@ enum SchemaV1: VersionedSchema {
             dueDate: Date? = nil,
             sortOrder: Int? = 0,
             scheduledTime: Date? = nil,
-            repeatType: RepeatType? = .none,
+            repeatType: RepeatType? = RepeatType.none,
             repeatInterval: Int? = 1,
             reminderTime: Date? = nil,
-            reminderType: ReminderType? = .none,
+            reminderType: ReminderType? = ReminderType.none,
             priority: Priority? = .medium,
             attachments: [Attachment]? = nil
         ) {

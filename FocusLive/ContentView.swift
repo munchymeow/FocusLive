@@ -56,6 +56,7 @@ struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Query private var taskGroups: [TaskGroup]
     @Environment(\.scenePhase) private var scenePhase
+    @Namespace private var filterNamespace
     @State private var activeFilter: TaskFilter = .all
     @State private var isPrivacyUnlocked = false
     @State private var isPrivacyUnlocking = false
@@ -278,7 +279,7 @@ struct ContentView: View {
         HStack(spacing: 12) {
             ForEach(TaskFilter.displayCases) { filter in
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                         if filter == .privateSpace && !isProUser {
                             showSubscriptionSheet = true
                         } else {
@@ -302,8 +303,15 @@ struct ContentView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
                     .background(
-                        Capsule()
-                            .fill(activeFilter == filter ? Color.blue : cardBackground)
+                        ZStack {
+                            Capsule().fill(cardBackground)
+                            // 激活药丸作为唯一具名几何体，在 tab 间滑动。
+                            if activeFilter == filter {
+                                Capsule()
+                                    .fill(Color.blue)
+                                    .matchedGeometryEffect(id: "filterActivePill", in: filterNamespace)
+                            }
+                        }
                     )
                     .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.2 : 0.06), radius: 6, x: 0, y: 3)
                 }
@@ -795,6 +803,7 @@ struct ContentView: View {
             } else {
                 ActivityManager.shared.scheduleSyncActivities(groups: taskGroups)
             }
+            AISummaryService.shared.requestSummaryUpdate(groups: taskGroups)
         }
     }
 
@@ -1034,7 +1043,7 @@ struct ContentView: View {
         let title = String(format: String(localized: "新分组 %lld"), Int64(taskGroups.count + 1))
         let newGroup = TaskGroup(
             title: title,
-            iconName: "folder.fill",
+            iconName: defaultGroupIconName(for: .todo),
             isPrivate: isPrivate,
             sortOrder: maxOrder + 1,
             tasks: []
@@ -1050,7 +1059,7 @@ struct ContentView: View {
         let title = String(format: String(localized: "新打卡分组 %lld"), Int64(taskGroups.count + 1))
         let checkInGroup = TaskGroup(
             title: title,
-            iconName: "calendar",
+            iconName: defaultGroupIconName(for: .dailyCheckIn),
             isPrivate: isPrivate,
             sortOrder: maxOrder + 1,
             tasks: []
@@ -1074,7 +1083,7 @@ struct ContentView: View {
         let title = String(format: String(localized: "新提醒分组 %lld"), Int64(taskGroups.count + 1))
         let reminderGroup = TaskGroup(
             title: title,
-            iconName: "bell.badge.fill",
+            iconName: defaultGroupIconName(for: .reminder),
             isPrivate: isPrivate,
             sortOrder: maxOrder + 1,
             tasks: []

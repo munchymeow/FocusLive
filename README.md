@@ -1,209 +1,151 @@
-# FocusLive（FocusScreen）
+# FocusLive (FocusScreen)  [去做](https://apps.apple.com/cn/app/%E5%8E%BB%E5%81%9A/id6757796328) ![1784696259872](image/README/1784696259872.png)
 
-FocusLive 是一个基于 iOS Live Activities 的待办事项应用。任务分组会自动同步到锁屏和灵动岛，用户可以在锁屏上直接勾选完成，并把结果回写到 App。
+[English Documentation](./README_EN.md) | [中文说明文档](./README.md)
 
-> 本 README 在「当前功能」之外，额外维护了一份经过代码审计的 **已知问题清单** 与 **分阶段开发路线图**，作为后续迭代的唯一事实来源（single source of truth）。改动落地后，请同步勾选对应条目。
+[![iOS 17.0+](https://img.shields.io/badge/iOS-17.0%2B-blue.svg?style=for-the-badge&logo=apple)](https://developer.apple.com/ios/)
+[![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange.svg?style=for-the-badge&logo=swift)](https://swift.org)
+[![SwiftUI](https://img.shields.io/badge/SwiftUI-Framework-blueviolet.svg?style=for-the-badge&logo=swift)](https://developer.apple.com/xcode/swiftui/)
+[![SwiftData](https://img.shields.io/badge/SwiftData-Persistence-red.svg?style=for-the-badge&logo=apple)](https://developer.apple.com/documentation/swiftdata)
+[![ActivityKit](https://img.shields.io/badge/ActivityKit-Live--Activities-brightgreen.svg?style=for-the-badge&logo=apple)](https://developer.apple.com/documentation/activitykit)
 
----
-
-## 一、当前功能概览
-
-- 首页筛选顺序：`全部`、`未完成`、`已完成`、`隐私空间`（默认 `全部`）
-- 首次启动：交互式新手教程，可直接设置字体大小、已完成显示、每日鼓励和卡片背景
-- 添加分组：右上角 `+` 下拉菜单创建 `传统待办事项`、`每日打卡`、`提醒事项`
-- 锁屏卡片：透明 / 不透明背景、已完成事项显示开关、字体大小调节、字体颜色自定义
-- 每日鼓励：首页 `全部` 页底部展示，支持随机刷新与自定义，并同步到锁屏鼓励卡片
-- 灵动岛：Compact / Expanded 展示
-- 会员（Pro）：隐私空间、智能提醒、最多 3 分组、最多 8 条任务、优先级 / 重复 / 计划时间
-- 快捷指令：`添加任务到分组`、`创建分组并添加任务`（App Intents）
+> **FocusLive (去做)** 是一个基于 iOS Live Activities (实时活动) & Dynamic Island (灵动岛) 的待办事项应用。任务分组会自动同步到锁屏与灵动岛，用户可以在锁屏卡片上直接勾选完成，并将变更实时回写落库到 App。目前已经上架苹果应用商店。
 
 ---
 
-## 二、架构总览
+> [!IMPORTANT]
+> 本 README 维护了一份完整的 **架构设计**、**核心功能**、**已知问题修复记录** 与 **分阶段路线图**，作为项目唯一事实来源（Single Source of Truth）。
+>
+> [小红书介绍](http://xhslink.com/o/84AIEjDK1pY) × [Appstore](https://apps.apple.com/cn/app/%E5%8E%BB%E5%81%9A/id6757796328)
 
-| 层 | 关键文件 | 职责 |
-| --- | --- | --- |
-| 数据 | `TaskModel.swift` | `TaskGroup` / `TaskItem`（SwiftData @Model）+ `TaskGroupSnapshot` / `TaskItemSnapshot`（跨进程序列化） |
-| 容器 | `FocusLiveApp.swift` / `ShortcutsIntents.swift` | App Group 共享 `ModelContainer`（`group.com.QingTeng.FocusLive` 下的 `FocusLive.store`） |
-| Live Activity | `ActivityManager.swift` / `FocusAttributes.swift` | 创建 / 更新 / 结束 Activity、智能提醒、每日鼓励 |
-| 锁屏交互 | `ToggleTaskIntent.swift` | `LiveActivityIntent`，在主 App 进程内切换完成状态并写入待同步队列 |
-| Widget UI | `FocusActivityWidget.swift` / `FocusWidget.swift` / `FocusTaskWidget.swift` | 锁屏 / 灵动岛卡片；主屏每日鼓励 Widget；主屏任务列表 Widget |
-| 主 UI | `ContentView.swift`(1129 行) + 9 个拆分文件 / `ProfileView.swift` / `LiveActivitySettingsView.swift` / `SubscriptionView.swift` | 首页、我的、设置、订阅 |
-| 服务 | `StoreKitManager.swift` / `NotificationManager.swift` / `PrivacyAuthService.swift` | 订阅、本地通知、Face ID |
+## 一、 当前核心功能 🚀
 
-**跨进程数据流**：主 App 写 SwiftData → `ActivityManager` 推送 Activity 内容 → 锁屏点击触发 `ToggleTaskIntent`（主 App 进程）→ 直接写入 App Group SwiftData store 并更新 Activity；`pendingTaskChanges` 仅作为直接落库失败时的兜底队列。
-
----
-
-## 三、已知问题清单（代码审计结果）
-
-> 优先级：**P0**=功能性缺陷/影响核心体验；**P1**=可靠性/一致性/技术债；**P2**=代码质量/打磨。
-> 状态：`[ ]` 待修复 / `[x]` 已修复。
-
-### P0 — 功能性缺陷
-
-- [x] **P0-1 主屏 Widget 与 App 数据完全脱节（含死代码）**
-  `ActivityManager.persistWidgetSnapshot()` 与 `ToggleTaskIntent.saveWidgetSnapshotToAppGroup()` 把丰富的任务数据写入 App Group 的 `widgetDisplaySnapshot` key，但 `FocusWidget.swift` 的 `Provider` 从不读取它——`WidgetDisplayData` 只有 `.motivation` 一种 case，主屏 Widget 只显示 **12 条硬编码文案**（与 App 内 50 条 CSV / 自定义鼓励均不同步）。结论：所有 `widgetDisplaySnapshot` 写入（4 处）都是死代码；主屏「任务清单 Widget」实际从未实现。
-  → 已修复：先采用「主屏 Widget = 共享数据源的每日鼓励」定位，删除 `widgetDisplaySnapshot` 写入死代码；`FocusWidget.Provider` 改为读取 App Group 中的当前每日鼓励 / 自定义鼓励。
-
-- [x] **P0-2 智能提醒依赖 `Task.sleep` 自动结束，App 挂起即失效**
-  `createSmartReminderActivity()` 用 `Task { try? await Task.sleep(... timeInterval ...) }` 在到点后结束 Activity。`timeInterval` 可达数小时甚至一周（`before1week`），一旦 App 被系统挂起/终止，该 Task 永不触发 → Activity 残留不消失；且倒计时文本「还剩 X 分钟」是创建时的静态快照，不会刷新。
-  → 已修复：移除智能提醒的长时间 `Task.sleep`；Activity 内容使用 `staleDate: scheduledTime`，Widget 端用 `Text(timerInterval:countsDown:)` 系统级渲染倒计时，并在后续同步时清理过期/无效提醒。
-
-- [x] **P0-3 智能提醒每次 sync 重复创建，锁屏堆叠**
-  `checkAndCreateSmartReminders()` 在每次 `syncActivities()`（onAppear / scenePhase / onChange(taskGroups) / 设置变更…多处）都执行，`createSmartReminderActivity()` 每次都用全新 `smart_reminder_<UUID>`，无「是否已存在」判重 → 短时间内堆叠多张重复智能提醒卡片。
-  → 已修复：智能提醒 ID 改为 `smart_reminder_<kind>_<sourceID>_<scheduledTime>`；同一提醒重复 sync 时更新现有 Activity，不再创建新卡片，并会清理非当前最高优先级的旧智能提醒。
-
-- [x] **P0-4 「显示条数」设置上限与实际渲染上限不一致**
-  `LiveActivitySettingsView.maxDisplayCount = isProUser ? 8 : 3`（Pro 可设 1~8），但 `FocusActivityWidget.maxDisplayCount` 在非紧凑视图下被 `isProUser ? 4 : 3` 截断。Pro 用户设 5~8 时，除非任务数 >4 自动进入紧凑网格，否则锁屏只显示 4 条 → 设置「看起来生效但没生效」。
-  → 已修复：Widget 渲染层按 Pro 8 / 免费 3 统一裁剪，和设置页上限一致。
-
-- [x] **P0-5 附件功能是假实现**
-  `AdvancedTaskEditor.addAttachment()` 只追加一条硬编码「示例链接 https://example.com」；`saveChanges()` 根本不写回 `task.attachments`（只存 taskType/repeat/reminder/priority）。UI 存在但数据不持久化，误导用户。
-  → 已修复：先从高级任务编辑器下线附件入口（M0），保留模型字段；M2 已实现真实链接附件的添加、展示与持久化（`AdvancedEditorViews.swift`），支持滑动删除。
-
-- [x] **P0-6 图标选择器数据错误**
-  `commonEmojis`（ContentView 内）混入了普通字符串 `"Fax"`（会在选择器里显示文字「Fax」）；并存在重复项（`⭐️`、`❤️` 各出现两次）。`IconPickerView` 用 `id: \.self`，重复值会触发 SwiftUI 重复 ID 警告与渲染异常。
-  → 已修复：`"Fax"` 替换为 `📠`，数组加载时去重，`IconPickerView` 改用索引作为唯一 id。
-
-### P1 — 可靠性 / 一致性 / 技术债
-
-- [x] **P1-1 每日打卡重置不可靠**
-  `resetDailyCheckInTasksIfNeeded()` 把 `lastDailyCheckInResetDate` 存进 `UserDefaults.standard`（非 App Group），且仅在主 App 前台触发。若用户只用锁屏/快捷指令、长期不开主 App，打卡永不重置。
-  → 已修复：重置日期改存 App Group；主 App 前台和 `ToggleTaskIntent` 直接落库前都会校验每日打卡重置，长期只从锁屏交互的用户也能触发重置。
-
-- [x] **P1-2 锁屏勾选不直接落库，存在数据滞后窗口**
-  `ToggleTaskIntent` 已运行在主 App 进程（`@MainActor`），却只更新 Activity + 写 `pendingTaskChanges`，不直接写 SwiftData，依赖下次 App 到前台才回写。期间 Activity / 快照 与数据库不一致。
-  → 已修复：`ToggleTaskIntent` 会直接打开 App Group 下的 SwiftData store 写入任务完成状态；`pendingTaskChanges` 仅在直接落库失败时作为兜底队列保留。
-
-- [x] **P1-3 `syncActivities` 全量重建 + `renderVersion` 每次变化**
-  `renderVersion = Date().timeIntervalSince1970` 导致每次 update 即使内容相同也被判定为「有变化」强制推送；叠加多入口高频触发（taskGroups/scenePhase/colorScheme），易触达 iOS 对 Activity 更新频率的预算限制，并产生「刚 start 又被 end」竞态。
-  → 已修复：SwiftUI 高频入口改为 250ms 合并同步；普通分组 / 每日鼓励 Activity 更新前做 `ContentState` diff；`renderVersion` 改为样式设置指纹，仅在显示条数、背景、字体、颜色、深浅色、Pro 状态等实际渲染输入变化时改变。
-
-- [x] **P1-4 灵动岛「关闭」为伪实现**
-  `dynamicIslandEnabled=false` 时返回全 `EmptyView` 的灵动岛，但 Activity 仍存活，灵动岛仍占位（最小区域）。README/教程宣称「关闭灵动岛」与实际不符。
-  → 已修复：产品文案改为「最小化展示」，设置页明确说明 iOS 不支持仅保留锁屏而彻底关闭灵动岛。
-
-- [x] **P1-5 「已完成」筛选下统计卡片恒为 100%**
-  `statsCard` 的 `visibleTodoTasks` 在 `completed` 筛选时只含已完成任务，`progress` 恒为 1.0，「今日进度」语义错乱。
-  → 已修复：统计卡片改为基于当前筛选范围的全量普通待办计算进度；`completed` / `incomplete` 筛选不再只用当前可见任务作为分母。
-
-- [x] **P1-6 `StoreKitManager` 双实例 / `.shared` 死单例**
-  `StoreKitManager.shared` 从未被 UI 引用；App 用 `@StateObject StoreKitManager()` 新建实例，`SubscriptionView` 预览又 `StoreKitManager()`。`.shared` 在 init 时也会跑 `refreshEntitlements()` 并写 App Group，与 StateObject 实例竞争写同一 `isProUser`。
-  → 已修复：删除未使用的 `.shared`，运行时统一使用 App 根部 `@StateObject` 注入的实例；预览保留独立实例，不参与生产运行。
-
-- [x] **P1-7 死代码清理**
-  - `ActivityManager.syncPendingChangesFromWidget(context:)`、`hasActiveGroupActivities()`、`updateTaskStatus(...)` 均无调用方（`ContentView.syncPendingChanges()` 才是真正路径）。
-  - `Item.swift`（`@Model class Item`）为 Xcode 模板残留，未注册进 schema，从未实例化。
-  → 已修复：删除上述无调用方方法、额外的 `hasPendingWidgetChanges()` 遗留方法，以及 Xcode 模板残留 `Item.swift`。
-
-### P2 — 代码质量 / 打磨
-
-- [x] **P2-1 `ContentView.swift` 2649 → 1129 行**：拆分为 `ContentView` / `AppSupport` / `FirstLaunchTutorialView` / `MotivationEditorView` / `EmojiData` / `IconPickerView` / `DatePickerSheet` / `TaskGroupCard` / `TaskRow` / `AdvancedEditorViews` 共 10 个文件；共享 helper 提取到 `AppSupport.swift` 并同步 Widget extension target。
-- [x] **P2-2 生产构建保留大量 `print`**（`ActivityManager` 数十处，含任务标题）：已替换为 DEBUG-only `os.Logger` helper，Release 构建不再计算/输出任务标题等调试日志。
-- [x] **P2-3 字体默认值/注释不一致**：`FocusActivityWidget.fontSizeScale` 默认 `?? 1.5`，注释写「0.7~1.4，默认 1.0」，滑块实际 0.7~2.0。已统一注释与文档为 0.7~2.0，默认 1.5。
-- [x] **P2-4 本地通知前台无展示 / 无交互**：`NotificationManager` 已实现 `UNUserNotificationCenterDelegate`，前台通知展示 banner/list/sound，并注册「完成」action 直接写入 App Group SwiftData。
-- [x] **P2-5 错误被静默吞掉**：已移除主界面关键写入路径的 `try? modelContext.save()`，统一走显式 `do/catch` 保存入口；保存失败会弹出错误提示，锁屏 fallback 待同步队列仅在 SwiftData 保存成功后清空，避免失败后丢变更。
-- [x] **P2-6 单元测试覆盖**：新增 `FocusLiveTests` target 与 `TaskModelTests`（15 个用例），覆盖 `TaskGroup.sortedTasks` 排序、完成计数、快照元数据保持、枚举 rawValue、`trimmed()` helper、`isReminder` 等核心模型逻辑；测试可在模拟器独立运行，不依赖 App Group。
-- [x] **P2-7 i18n 补全**：为 `en.lproj` / `zh-Hans.lproj` 补充 133 条缺失条目；`saveChanges(failureMessage:)` 与 `saveModelContext(failureMessage:)` 的中文错误提示已改用 `String(localized:)` 包装，英文环境下可正确显示翻译。
+- 📌 **锁屏实时活动 & 灵动岛**：分组任务自动生成锁屏卡片，灵动岛支持 Compact / Expanded 展态；锁屏端即点即勾选，数据直接写库。
+- 🤖 **AI 核心工作重心总结（Humanizer-zh 拟人化引擎）**：
+  - 基于 OpenRouter API (`inclusionai/ling-2.6-flash`)，在 App 新增专属 **AI 总结 Tab**。
+  - **全任务类型收集**：跨分组自动提取所有未完成的待办事项（含普通待办、每日打卡与提醒事项）。
+  - **Humanizer-zh 拟人化 Prompt**：摒弃“以...为基调”、“同步推进”等公文假大空套话，像贴心私人管家一样自然连贯地为你梳理真实日常。
+  - **任务指纹防重复机制**：仅在任务新增、删除、修改或勾选完成时比对哈希触发，视图加载与 Tab 切换自动复用持久化缓存，零浪费 API 调用。
+  - **Pro 会员权益与 1 次设备试用**：支持设备 1 次免费体验，消费后无缝引导升级 Pro 会员。
+- 🎨 **锁屏卡片定制与自适应排版**：
+  - 透明 / 不透明背景模式、相册壁纸导入（`PhotosPicker`）与真实锁屏高保真预览。
+  - **AI 卡片 140% 动态阶梯字号**：字号最高支持 140% 放大（18pt），根据字数智能缩放（18pt~12pt）并按字数灵活调整垂直 Padding（12pt~16pt），彻底杜绝锁屏文字截断溢出。
+  - 11 色任务文本配色，全面支持自适应高对比度渲染。
+- 🧪 **实验室 UI 风格库 (11 种大审美设计语言)**：
+  - `Ambient Glass`（默认环境光晕真玻璃）
+  - `Neo Brutal`（粗边框硬阴影高对比）
+  - `Editorial`（杂志排版大标题衬线）
+  - `Terminal`（极客命令行绿幕终端）
+  - `Aurora`（极光渐变浮动光晕）
+  - `Glassmorphism` / `Flat Receipt` / `Skeuomorphism` / `Material You` / `Minimal` / `Bold Stats`
+- 📅 **任务形态与重复引擎**：支持 `传统待办事项`、`每日打卡`、`提醒事项` ；支持按日/周/月/年重复推算下一期实例。
+- 🔒 **Face ID 隐私空间**：加密保护隐私分组与任务，主界面与锁屏自动掩码隐藏。
+- 🔔 **智能提醒与通知**：计划时间到点倒计时系统级渲染，前台通知交互响应。
+- 🛍️ **StoreKit 2 Pro 会员订阅**：
+  - **月度会员**：`com.qingteng.FocusLive.pro.monthly`
+  - **年度会员**：`com.qingteng.FocusLive.pro.yearly`
+- ⚡ **快捷指令集成**：支持通过 Siri / App Intents 创建分组与快速添加待办。
 
 ---
 
-## 四、优化与升级方向（产品 / 工程）
+## 二、 架构设计与关键文件 🛠️
 
-- **跨进程一致性收敛**：把「锁屏勾选 → 落库 → Activity → 快照」收敛为单一可靠管线（见 P1-2 / P1-3），消除滞后与竞态。
-- **~~主屏 Widget 真正可用~~**：✅ 已完成 — `FocusTaskWidget.swift` 读取 App Group SwiftData，支持 small/medium/large 三种尺寸。
-- **智能提醒体系化**：以本地通知为主、Live Activity 为辅；倒计时交给系统侧 `Text(timerInterval:)`；提醒判重与生命周期清晰化。
-- **~~重复任务（repeat）落地~~**：✅ 已完成 — `nextRepeatDate()` + `createNextRepeatTask()` 在 `AppSupport.swift`，集成于 `TaskRow.toggleTask()` 和 `ToggleTaskIntent`。
-- **~~数据可迁移性~~**：✅ VersionedSchema + MigrationPlan 已引入（`DataMigration.swift`）；JSON 导入/导出和 iCloud 备份留到 M4。
-- **设计系统统一**：颜色/圆角/阴影/卡片样式在多个 View 中重复硬编码，抽出 `Theme` / 复用组件。
-- **可观测性**：统一 Logger + 关键路径埋点（Activity 创建成功率、pending 同步量），便于线上排查。
-
----
-
-## 五、分阶段开发路线图（Roadmap）
-
-> 原则：先稳住核心管线，再补功能，最后做体验与规模化。每个里程碑给出范围、验收标准与涉及文件。
-
-### M0 · 紧急修复（1 个迭代，先发补丁）
-**目标**：消除「设置不生效 / 假功能 / 数据脱节」类用户可感知缺陷。
-- 修 P0-4（显示条数上限统一）、P0-5（附件下线或落地）、P0-6（emoji 清洗去重）。
-- 修 P0-1：决策主屏 Widget 形态——**建议先删除死代码、把 Widget 明确为「共享数据源的每日鼓励」**（读取 CSV/自定义文案），任务 Widget 留到 M2。
-- 验收：Pro 设 8 条锁屏确显 8 条；图标选择器无「Fax」无重复；主屏 Widget 文案与 App 一致；无写入死代码残留。
-- 涉及：`FocusActivityWidget.swift`、`ContentView.swift`、`FocusWidget.swift`、`ActivityManager.swift`、`ToggleTaskIntent.swift`。
-
-### M1 · 同步管线加固（1–2 个迭代）
-**目标**：锁屏交互即时、可靠、无竞态。
-- 修 P1-2（Intent 内直接落库）、P1-3（内容 diff + sync 节流 + renderVersion 语义化）、P0-2 / P0-3（智能提醒生命周期 & 判重）、P1-1（打卡重置移到 App Group）。
-- 清理 P1-7 死代码、P1-6 StoreKitManager 单实例。
-- 验收：锁屏勾选后立即落库（断网/杀后台后重开数据正确）；连续切换深浅色/前后台不产生重复或闪烁 Activity；智能提醒不堆叠、能按时消失。
-- 涉及：`ToggleTaskIntent.swift`、`ActivityManager.swift`、`ContentView.swift`、`StoreKitManager.swift`、`FocusLiveApp.swift`。
-
-### M2 · 功能补全 ✅ 已完成
-**目标**：把「半成品」做成「真功能」。
-- [x] **重复任务引擎**：完成/到期生成下一次实例（`RepeatType` × `repeatInterval`）— `AppSupport.swift`，集成于 `TaskRow.toggleTask()` 和 `ToggleTaskIntent`。
-- [x] **主屏任务 Widget**：`FocusTaskWidget.swift` 读取 App Group SwiftData，small/medium/large 三种尺寸，显示真实任务数据与进度。
-- [x] **附件**：链接附件的真实添加、展示与持久化 — `AdvancedEditorViews.swift`，支持滑动删除。
-- [x] P1-5 统计口径修正、P2-4 通知前台展示 + 「完成」action（在 M1/P2 阶段已完成）。
-- 验收：25 个单元测试全部通过；构建零 error。
-
-### M3 · 工程化与可维护性（大部分已完成）
-**目标**：降低后续迭代成本。
-- [x] P2-1 拆分 `ContentView`（2649 → 1129 行 + 9 个文件）；P2-2 Logger 化；P2-5 保存错误处理；P2-7 补全 en 本地化。
-- [x] SwiftData `VersionedSchema` + `MigrationPlan`（`DataMigration.swift`）。
-- [x] JSON 导入/导出（`DataExportImport.swift`）— 支持全量导出为 ISO8601 JSON + 去重导入。
-- [x] P2-6 测试：25 个单元测试覆盖核心模型逻辑、排序、重复任务引擎。
-- [ ] 关键流程加 UI 测试（留到后续迭代）。
-- [x] 抽取 `Theme` 设计系统（`Theme.swift`）— 统一圆角、阴影、颜色、字体 token。
-- 验收：CI 可跑测试（✅ 25/25 pass）；新增字段走显式迁移（✅ VersionedSchema 就绪）；单文件不超过 ~600 行（✅ 最大 1129 行 `ContentView`）。
-
-### M4 · 规模化与增长（探索）
-- iCloud / CloudKit 同步（多设备）；
-- 数据统计页（完成率趋势、打卡日历）；
-- Apple Watch / 桌面 Widget 拓展；
-- 订阅转化优化（试用、A/B、引导）。
-
----
-
-## 六、关键文件
-
-- `FocusLive/ContentView.swift`：首页筛选、分组列表（1129 行，已从 2649 行拆分）
-- `FocusLive/TaskGroupCard.swift`：分组卡片视图
-- `FocusLive/TaskRow.swift`：任务行视图（含重复任务引擎集成）
-- `FocusLive/AdvancedEditorViews.swift`：高级任务/分组编辑器（含附件功能）
-- `FocusLive/AppSupport.swift`：共享 helper 常量与函数（编译到 App + Widget target）
-- `FocusLive/ActivityManager.swift`：Live Activity 创建/更新/结束、智能提醒、每日鼓励
-- `FocusLive/DataMigration.swift`：SwiftData `VersionedSchema` + `MigrationPlan`
-- `FocusLive/TaskModel.swift`：数据模型（`TaskGroup` / `TaskItem` / `TaskItemSnapshot` / `Attachment`）
-- `FocusLive/ToggleTaskIntent.swift`：锁屏勾选任务 Intent（含直接落库 + 重复任务）
-- `FocusWidget/FocusTaskWidget.swift`：主屏任务列表 Widget（small/medium/large）
-- `FocusWidget/FocusWidget.swift`：主屏每日鼓励 Widget
-- `FocusWidget/FocusActivityWidget.swift`：锁屏与灵动岛 UI
-- `FocusLive/DataMigration.swift`：SwiftData VersionedSchema + MigrationPlan
-- `FocusLive/DataExportImport.swift`：JSON 导入/导出
-- `FocusLive/Theme.swift`：设计系统 token（圆角、阴影、颜色、字体）
-
----
-
-## 七、运行要求
-
-- iOS 17+ / Xcode 15+，真机优先（锁屏 Live Activity / 灵动岛建议真机验证）
-- App 与 Widget Extension 共用 App Group：`group.com.QingTeng.FocusLive`
-- URL Scheme：`focuslive://`（`toggle` / `sync` / `end`）；`NSSupportsLiveActivities = YES`
-
-## 八、调试建议
-
-- 在 Xcode Console 查看 `ActivityManager` 同步日志（已改为 DEBUG-only `os.Logger`，Release 静默）
-- 验证当前构建：
-
-```bash
-xcodebuild -scheme FocusLive -project FocusLive.xcodeproj -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet build
+```
++-------------------------------------------------------------------+
+|                            App Group                              |
+|                    group.com.QingTeng.FocusLive                   |
+|                        (FocusLive.store)                          |
++---------------------------------+---------------------------------+
+                                  |
+            +---------------------+---------------------+
+            |                                           |
+            v                                           v
++-----------------------+                   +-----------------------+
+|        主 App         |                   |   Widget Extension    |
+| ([FocusLiveApp.swift](file:///Users/qingteng/Downloads/%E9%A1%B9%E7%9B%AE%E4%BB%A3%E7%A0%81_Projects/%E6%88%91%E7%9A%84%E5%88%B6%E4%BD%9C/FocusLive/FocusLive/FocusLive/FocusLiveApp.swift))  |                   |  ([FocusWidgetBundle.swift](file:///Users/qingteng/Downloads/%E9%A1%B9%E7%9B%AE%E4%BB%A3%E7%A0%81_Projects/%E6%88%91%E7%9A%84%E5%88%B6%E4%BD%9C/FocusLive/FocusLive/FocusWidget/FocusWidgetBundle.swift))  |
++-----------------------+                   +-----------------------+
+|  SwiftUI Views        |                   |  LockScreen Widget    |
+|  ActivityManager      |                   |  Dynamic Island       |
+|  StoreKitManager      |                   |  HomeScreen Widget    |
++-----------------------+                   +-----------------------+
+            ^                                           |
+            |           锁屏点击交互触发                  |
+            +-------------------------------------------+
+                     ToggleTaskIntent (@MainActor)
 ```
 
-## 九、文档索引
+| 层级                   | 关键文件                                                                                                                                                                                                                                            | 职责说明                                                                                                                                                                                                                                                                                   |
+| :--------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **数据模型**     | [TaskModel.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/TaskModel.swift)                                                                                                                         | `TaskGroup` / `TaskItem` (SwiftData `@Model`)，`TaskGroupSnapshot` 跨进程快照                                                                                                                                                                                                      |
+| **版本迁移**     | [DataMigration.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/DataMigration.swift)                                                                                                                 | SwiftData`VersionedSchema` + `MigrationPlan` 数据平滑迁移                                                                                                                                                                                                                              |
+| **数据导入导出** | [DataExportImport.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/DataExportImport.swift)                                                                                                           | ISO8601 JSON 全量导出与去重恢复                                                                                                                                                                                                                                                            |
+| ** Live Activity **    | [ActivityManager.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/ActivityManager.swift)                                                                                                             | 实时活动创建、哈希 diff 更新、智能提醒与防抖同步                                                                                                                                                                                                                                           |
+| **锁屏交互**     | [ToggleTaskIntent.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/ToggleTaskIntent.swift)                                                                                                           | `LiveActivityIntent`，锁屏直接落库 App Group 数据库                                                                                                                                                                                                                                      |
+| **快捷指令**     | [ShortcutsIntents.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/ShortcutsIntents.swift)                                                                                                           | App Intents 集成 Siri 与快捷指令                                                                                                                                                                                                                                                           |
+| **组件 UI**      | [FocusActivityWidget.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusWidget/FocusActivityWidget.swift)                                                                                                   | 锁屏与灵动岛渲染 UI；[FocusTaskWidget.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusWidget/FocusTaskWidget.swift) 主屏待办 Widget                                                                                                             |
+| **主 UI 视图**   | [ContentView.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/ContentView.swift)                                                                                                                     | 首页筛选、分组卡片 ([TaskGroupCard.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/TaskGroupCard.swift))、任务行 ([TaskRow.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/TaskRow.swift)) |
+| **实验室 UI**    | [LabView.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/LabView.swift)                                                                                                                             | 实验室测试版 UI 控制器，11 种设计语言面板                                                                                                                                                                                                                                                  |
+| **设置与订阅**   | [LiveActivitySettingsView.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/LiveActivitySettingsView.swift)                                                                                           | 锁屏卡片设置页（含即时预览）；[SubscriptionView.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/SubscriptionView.swift) 内购                                                                                                               |
+| **设计系统**     | [Theme.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/Theme.swift) / [AppSupport.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/AppSupport.swift) | 全局 Design Tokens (圆角/阴影/颜色/字体/Logger/重复算法)                                                                                                                                                                                                                                   |
 
-- [QUICKSTART.md](./QUICKSTART.md)：快速上手与功能验证
-- [SETUP_CHECKLIST.md](./SETUP_CHECKLIST.md)：签名、Target、运行环境检查
-- [TECHNICAL_GUIDE.md](./TECHNICAL_GUIDE.md)：ActivityKit 实现说明
-- [CHANGELOG.md](./CHANGELOG.md)：最近更新日志
-- [说明文档.md](./说明文档.md)：项目记录与实施进度
+---
+
+## 三、 问题审计与修复记录 📝
+
+> 状态说明：`[x]` 表示已修复落地并经过校验。
+
+> [!TIP]
+> **最近关键修复记录**：
+>
+> - **锁屏 Live Activity 背景与实验室模式同步**：修复未开启实验室 UI 时锁屏偶尔残留 `glassmorphism` 紫色渐变背景的问题，未开启时固定回退为 `Ambient Glass` 默认模式；`renderVersion` 引入 `labEnabled` 状态指纹，样式切换零滞后。
+> - **锁屏设置页优化与裁剪修复**：[LiveActivitySettingsView.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/LiveActivitySettingsView.swift) 修复了最左侧“默认 (A)”选色圈边框与阴影被裁切的 Display Bug；重构为 4 个清晰模块并新增顶栏**实时交互预览卡片**。
+> - ** StoreKit 2 订阅 Product ID 验证**：确认月度 `com.qingteng.FocusLive.pro.monthly` 与年度 `com.qingteng.FocusLive.pro.yearly` 配置正确。
+
+### 缺陷修复列表 (P0 ~ P2)
+
+- [X] **P0-1 主屏 Widget 数据同步**：`FocusTaskWidget.swift` 直接读取 App Group SwiftData，支持 Small / Medium / Large 三尺寸。
+- [X] **P0-2 智能提醒生命周期**：移除长 `Task.sleep`；改用 `staleDate` + 系统级 `Text(timerInterval:)` 倒计时。
+- [X] **P0-3 智能提醒判重**：智能提醒 ID 规范化为 `smart_reminder_<kind>_<sourceID>_<time>`，消除重复卡片堆叠。
+- [X] **P0-4 锁屏显示条数一致性**：统一 Pro 8 条 / 免费 3 条裁剪上限。
+- [X] **P0-5 附件功能**：在 [AdvancedEditorViews.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLive/AdvancedEditorViews.swift) 实现真实的 URL 链接附件添加、持久化与左滑删除。
+- [X] **P0-6 Emoji 去重与非法字符清理**：替换 `"Fax"` 为 `📠`，选择器去重并改用索引唯一 ID。
+- [X] **P1-1 每日打卡重置**：重置日期存入 App Group，锁屏 Intent 落库前亦能触发自动重置。
+- [X] **P1-2 锁屏勾选直接落库**：`ToggleTaskIntent` 运行于 `@MainActor`，直接写库 App Group SwiftData。
+- [X] **P1-3 Live Activity 防抖与更新 Hash**：高频入口增加 250ms 防抖，`renderVersion` 改为纯样式哈希，避免频繁超预算。
+- [X] **P1-4 灵动岛“关闭”文案**：修正为“最小化展示”，符合 iOS 系统行为。
+- [X] **P1-5 统计口径修正**：`statsCard` 基于全量待办计算进度，解决已完成筛选下进度恒为 100% 问题。
+- [X] **P1-6 StoreKitManager 单例**：移除多余 `.shared` 竞争写，统一根部 `@StateObject` 注入。
+- [X] **P1-7 死代码清理**：移除模板 `Item.swift` 及无调用方同步代码。
+- [X] **P2-1 ContentView 拆分**：将 2649 行 `ContentView.swift` 拆分为 10 个职责明确的模块文件。
+- [X] **P2-2 DEBUG-only Logger**：替代日志中的 `print`，Release 静默。
+- [X] **P2-5 错误处理**：显式 `do/catch` 包裹 ModelContext 保存并向用户反馈提示。
+- [X] **P2-6 单元测试覆盖**：25 个用例覆盖模型、排序、算期逻辑 ([TaskModelTests.swift](file:///Users/qingteng/Downloads/项目代码_Projects/我的制作/FocusLive/FocusLive/FocusLiveTests/TaskModelTests.swift))。
+- [X] **P2-7 本地化补全**：补全 `zh-Hans` / `en` 133 条国际化文案。
+
+---
+
+## 四、 运行环境与调试 🛠️
+
+> [!NOTE]
+> - **iOS 版本**：iOS 17.0+
+> - **Xcode**：Xcode 15.0+
+> - **App Group Identifier**：`group.com.QingTeng.FocusLive`
+> - **URL Scheme**：`focuslive://` (`toggle` / `sync` / `end`)
+
+### 命令行编译验证
+
+```bash
+xcodebuild -scheme FocusLive -project FocusLive.xcodeproj -derivedDataPath ./build -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -quiet build
+```
+
+---
+
+## 五、 文档索引 📂
+
+- 📘 [TECHNICAL_GUIDE.md](./TECHNICAL_GUIDE.md)：ActivityKit 与跨进程架构指南
+- ⚡ [QUICKSTART.md](./QUICKSTART.md)：快速上手与测试流程
+- ✅ [SETUP_CHECKLIST.md](./SETUP_CHECKLIST.md)：环境部署与签名校验
+- 📋 [CHANGELOG.md](./CHANGELOG.md)：版本更新日志
+- 📄 [说明文档.md](./说明文档.md)：实施进度与项目说明
+
+
+Designed By [QingTengStudio](https://qingtengstudio.com/) × [munchymeow](https://buymeacoffee.com/munchymeow)

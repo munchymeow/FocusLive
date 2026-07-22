@@ -17,13 +17,14 @@ struct TaskRow: View {
     var onMoveDown: () -> Void = {}
     var canMoveUp: Bool = false
     var canMoveDown: Bool = false
-    
+
     @State private var isEditing = false
     @State private var editedTitle = ""
     @State private var showDatePicker = false
     @State private var showAdvancedEditor = false
     @State private var persistenceErrorMessage = ""
     @State private var showPersistenceErrorAlert = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     
     private var formattedDate: String? {
         guard let date = task.dueDate else { return nil }
@@ -55,7 +56,7 @@ struct TaskRow: View {
                                 lineWidth: 2.5
                             )
                             .frame(width: 26, height: 26)
-                        
+
                         if task.isCompleted {
                             Circle()
                                 .fill(
@@ -66,16 +67,21 @@ struct TaskRow: View {
                                     )
                                 )
                                 .frame(width: 26, height: 26)
-                            
+
                             Image(systemName: "checkmark")
                                 .font(.system(size: 12, weight: .bold))
                                 .foregroundStyle(.white)
+                                // 勾上时一次回弹 —— 完成反馈。reduceMotion 时禁用。
+                                .symbolEffect(.bounce, value: task.isCompleted)
                         } else if task.taskType == .dailyCheckIn {
                             Image(systemName: "calendar")
                                 .font(.system(size: 12, weight: .bold))
                                 .foregroundStyle(.blue.opacity(0.5))
                         }
                     }
+                    // 完成态切换做空圆 ↔ 渐变圆 + 勾号 的连贯淡入淡出，
+                    // 取代 SwiftUI 默认的瞬间 insert/remove。
+                    .contentTransition(.opacity)
                 }
                 .buttonStyle(.plain)
             }
@@ -222,8 +228,7 @@ struct TaskRow: View {
     
     private func toggleTask() {
         guard task.taskType != .reminder else { return }
-        guard task.taskType != .reminder else { return }
-        withAnimation(.spring(duration: 0.2)) {
+        withAnimation(MotionTokens.toggle(reduceMotion: reduceMotion)) {
             task.isCompleted.toggle()
         }
         if saveChanges(failureMessage: String(localized: "更新任务状态失败")) {

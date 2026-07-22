@@ -13,6 +13,8 @@ import os
 @main
 struct FocusLiveApp: App {
     @StateObject private var storeKitManager = StoreKitManager()
+    /// 设计系统风格管理器：全局注入，避免经典 Profile → LabView 路径缺失 environmentObject 闪退。
+    @ObservedObject private var uiStyleManager = UIStyleManager.shared
     
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -44,6 +46,7 @@ struct FocusLiveApp: App {
                     handleURL(url)
                 }
                 .environmentObject(storeKitManager)
+                .environmentObject(uiStyleManager)
         }
         .modelContainer(sharedModelContainer)
     }

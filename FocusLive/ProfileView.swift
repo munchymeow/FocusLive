@@ -334,7 +334,9 @@ struct ProfileView: View {
 
     private var labRow: some View {
         NavigationLink {
+            // storeKitManager / uiStyleManager 已在 App 根注入；此处再兜底，防止导航链路丢 environment。
             LabView()
+                .environmentObject(UIStyleManager.shared)
         } label: {
             ProfileRow(
                 item: ProfileItem(

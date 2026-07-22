@@ -400,7 +400,7 @@ struct FirstLaunchTutorialView: View {
     }
 
     private func goToPreviousPage() {
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(.easeOut(duration: 0.22)) {
             currentPage = max(0, currentPage - 1)
         }
     }
@@ -412,7 +412,7 @@ struct FirstLaunchTutorialView: View {
             return
         }
 
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(.easeOut(duration: 0.22)) {
             currentPage = min(pageCount - 1, currentPage + 1)
         }
     }

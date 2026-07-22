@@ -15,7 +15,8 @@ struct SubscriptionView: View {
     @EnvironmentObject private var storeKitManager: StoreKitManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @State private var selectedPlanID: String = "com.qingteng.FocusLive.pro.yearly"
+    @State private var selectedPlanID: String = StoreKitManager.yearlyProductID
+    @State private var showErrorAlert = false
 
     private let bgTop    = Color(red: 0.04, green: 0.04, blue: 0.14)
     private let bgBottom = Color(red: 0.02, green: 0.02, blue: 0.08)
@@ -44,6 +45,22 @@ struct SubscriptionView: View {
         .task {
             await storeKitManager.loadProducts()
             await storeKitManager.refreshEntitlements()
+        }
+        .onChange(of: storeKitManager.lastErrorMessage) { _, newValue in
+            showErrorAlert = newValue != nil
+        }
+        .alert("无法完成操作", isPresented: $showErrorAlert) {
+            Button("重试") {
+                Task {
+                    storeKitManager.lastErrorMessage = nil
+                    await storeKitManager.loadProducts()
+                }
+            }
+            Button("知道了", role: .cancel) {
+                storeKitManager.lastErrorMessage = nil
+            }
+        } message: {
+            Text(storeKitManager.lastErrorMessage ?? "")
         }
     }
 
@@ -108,36 +125,63 @@ struct SubscriptionView: View {
             FreePlanCard()
 
             SubscriptionPlanCard(
-                productID: "com.qingteng.FocusLive.pro.yearly",
-                isSelected: selectedPlanID == "com.qingteng.FocusLive.pro.yearly",
+                productID: StoreKitManager.yearlyProductID,
+                isSelected: selectedPlanID == StoreKitManager.yearlyProductID,
                 isRecommended: true,
                 badgeText: "推荐",
                 storeKitManager: storeKitManager,
-                onSelect: { selectedPlanID = "com.qingteng.FocusLive.pro.yearly" }
+                onSelect: { selectedPlanID = StoreKitManager.yearlyProductID }
             )
 
             SubscriptionPlanCard(
-                productID: "com.qingteng.FocusLive.pro.monthly",
-                isSelected: selectedPlanID == "com.qingteng.FocusLive.pro.monthly",
+                productID: StoreKitManager.monthlyProductID,
+                isSelected: selectedPlanID == StoreKitManager.monthlyProductID,
                 isRecommended: false,
                 badgeText: nil,
                 storeKitManager: storeKitManager,
-                onSelect: { selectedPlanID = "com.qingteng.FocusLive.pro.monthly" }
+                onSelect: { selectedPlanID = StoreKitManager.monthlyProductID }
             )
         }
     }
 
     // MARK: - Subscribe CTA Button
 
+    private var gradientButtonBackground: some View {
+        if storeKitManager.isPurchasing {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.22, green: 0.44, blue: 0.95).opacity(0.7),
+                    Color(red: 0.10, green: 0.62, blue: 0.96).opacity(0.7)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        } else {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.22, green: 0.44, blue: 0.95),
+                    Color(red: 0.10, green: 0.62, blue: 0.96)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+    }
+
     private var ctaButton: some View {
         Button {
             Task { await storeKitManager.purchase(productID: selectedPlanID) }
         } label: {
             HStack(spacing: 6) {
+                if storeKitManager.isPurchasing {
+                    ProgressView()
+                        .tint(.white)
+                }
                 let label = selectedPlanID.contains("yearly") ? "立即开通年度会员" : "立即开通月度会员"
-                Text(label)
+                Text(storeKitManager.isPurchasing ? "处理中…" : label)
                     .fontWeight(.semibold)
-                if let price = storeKitManager.product(for: selectedPlanID)?.displayPrice {
+                if !storeKitManager.isPurchasing,
+                   let price = storeKitManager.product(for: selectedPlanID)?.displayPrice {
                     Text("· \(price)")
                         .fontWeight(.regular)
                         .opacity(0.88)
@@ -147,20 +191,12 @@ struct SubscriptionView: View {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.22, green: 0.44, blue: 0.95),
-                        Color(red: 0.10, green: 0.62, blue: 0.96)
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
+            .background(gradientButtonBackground)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .shadow(color: Color(red: 0.1, green: 0.4, blue: 0.9).opacity(0.45), radius: 12, x: 0, y: 6)
         }
         .buttonStyle(.plain)
+        .disabled(storeKitManager.isPurchasing)
     }
 
     // MARK: - Pro Unlocked Section
@@ -202,7 +238,8 @@ struct SubscriptionView: View {
         ("square.3.layers.3d",    Color(red: 0.25, green: 0.78, blue: 0.7),"多分组锁屏展示",    "锁屏同时显示最多 3 个分组"),
         ("list.number",           Color(red: 0.35, green: 0.85, blue: 0.45),"更多任务条目",     "锁屏最多同时显示 8 条任务"),
         ("calendar.badge.clock",  Color(red: 0.72, green: 0.45, blue: 1.0),"任务时间 & 重复",   "精确计划时间、灵活重复规则"),
-        ("flag.fill",             Color(red: 1.0, green: 0.35, blue: 0.4), "优先级管理",        "为任务标记紧急 / 高 / 中 / 低")
+        ("flag.fill",             Color(red: 1.0, green: 0.35, blue: 0.4), "优先级管理",        "为任务标记紧急 / 高 / 中 / 低"),
+        ("paintpalette.fill",     Color(red: 0.95, green: 0.45, blue: 0.75),"实验室 UI 风格库", "解锁 Ambient / Neo Brutal / Editorial / Aurora / Terminal 等全部设计语言（Glassmorphism 免费）")
     ]
 
     private var featuresSection: some View {
@@ -436,6 +473,7 @@ struct ShinyText: View {
     var font: Font = .headline
     /// 扫光位置 0→1.4 循环
     @State private var phase: CGFloat = -0.2
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Text(text)
@@ -456,6 +494,8 @@ struct ShinyText: View {
                 )
             )
             .onAppear {
+                // reduceMotion：永续流光属装饰性动态，系统要求关闭。
+                guard !reduceMotion else { return }
                 withAnimation(.linear(duration: 3.0).repeatForever(autoreverses: false)) {
                     phase = 1.4
                 }

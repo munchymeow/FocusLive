@@ -21,6 +21,11 @@ struct BorderlessRootTabView: View {
                     Label(String(localized: "事项"), systemImage: "checklist")
                 }
 
+            AISummaryView()
+                .tabItem {
+                    Label(String(localized: "AI 总结"), systemImage: "sparkles")
+                }
+
             BorderlessProfileView()
                 .tabItem {
                     Label(String(localized: "我的"), systemImage: "person.fill")

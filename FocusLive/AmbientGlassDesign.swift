@@ -19,54 +19,77 @@ enum AppUIStyle: String, CaseIterable, Identifiable {
     case minimalism = "minimal"
     case glassmorphism = "glassmorphism"
     case boldStats = "bold_stats"
+    case neoBrutal = "neo_brutal"
+    case editorial = "editorial"
+    case aurora = "aurora"
+    case terminal = "terminal"
 
     var id: String { rawValue }
+
+    /// 仅 Glassmorphism 对免费用户开放，其余为 Pro 专属。
+    var requiresPro: Bool { self != .glassmorphism }
 
     var displayName: LocalizedStringResource {
         switch self {
         case .ambientGlass: return "Ambient Glass"
-        case .flatDesign: return "Flat Design"
+        case .flatDesign: return "Flat Receipt"
         case .skeuomorphism: return "Skeuomorphism"
-        case .materialDesign: return "Material Design"
-        case .minimalism: return "Minimalism"
+        case .materialDesign: return "Material You"
+        case .minimalism: return "Minimal"
         case .glassmorphism: return "Glassmorphism"
         case .boldStats: return "Bold Stats"
+        case .neoBrutal: return "Neo Brutal"
+        case .editorial: return "Editorial"
+        case .aurora: return "Aurora"
+        case .terminal: return "Terminal"
         }
     }
 
     var subtitle: LocalizedStringResource {
         switch self {
-        case .ambientGlass: return "环境光晕 + 毛玻璃 + 渐变"
-        case .flatDesign: return "纯色扁平、无阴影无渐变"
-        case .skeuomorphism: return "拟物质感、纹理与立体阴影"
-        case .materialDesign: return "Material You 风格、色彩提取"
-        case .minimalism: return "极简留白、仅文字层级"
-        case .glassmorphism: return "毛玻璃卡片、高斯模糊背景"
-        case .boldStats: return "大胆数据仪表盘 + 毛玻璃点缀"
+        case .ambientGlass: return "环境光晕 + 真玻璃折射"
+        case .flatDesign: return "小票纸感 · 等宽文本 · 虚线"
+        case .skeuomorphism: return "拟物高光 · 厚重阴影"
+        case .materialDesign: return "Material You · 色带层级"
+        case .minimalism: return "极简留白 · 细衬线"
+        case .glassmorphism: return "毛玻璃 · 免费可用"
+        case .boldStats: return "大数字仪表盘"
+        case .neoBrutal: return "粗边框 · 硬阴影 · 高对比"
+        case .editorial: return "杂志排版 · 大标题 · 衬线"
+        case .aurora: return "极光渐变 · 浮动色块"
+        case .terminal: return "终端等宽 · 扫描线质感"
         }
     }
 
     var icon: String {
         switch self {
         case .ambientGlass: return "sparkles"
-        case .flatDesign: return "square.fill"
+        case .flatDesign: return "doc.plaintext"
         case .skeuomorphism: return "cube.fill"
         case .materialDesign: return "paintpalette.fill"
         case .minimalism: return "minus.circle"
         case .glassmorphism: return "aqi.medium"
         case .boldStats: return "chart.bar.fill"
+        case .neoBrutal: return "square.on.square"
+        case .editorial: return "text.book.closed.fill"
+        case .aurora: return "rainbow"
+        case .terminal: return "chevron.left.forwardslash.chevron.right"
         }
     }
 
     var accentColor: Color {
         switch self {
         case .ambientGlass: return .blue
-        case .flatDesign: return .blue
+        case .flatDesign: return Color(red: 0.15, green: 0.15, blue: 0.15)
         case .skeuomorphism: return Color(red: 0.2, green: 0.4, blue: 0.7)
         case .materialDesign: return .teal
         case .minimalism: return .primary
         case .glassmorphism: return .purple
         case .boldStats: return .orange
+        case .neoBrutal: return Color(red: 1.0, green: 0.84, blue: 0.0)
+        case .editorial: return Color(red: 0.55, green: 0.12, blue: 0.18)
+        case .aurora: return Color(red: 0.45, green: 0.75, blue: 1.0)
+        case .terminal: return Color(red: 0.2, green: 0.95, blue: 0.45)
         }
     }
 }
@@ -88,12 +111,35 @@ protocol UIStyleTokens {
     var useDashedDividers: Bool { get }
     /// 是否使用等宽字体（小票风格）
     var useMonospaceText: Bool { get }
+    /// 分组是否包在独立卡片里（而不是仅靠留白）
+    var wrapsGroupsInCards: Bool { get }
+    /// 统计区是否使用大数字仪表盘布局
+    var usesBoldStatsLayout: Bool { get }
+    /// 任务行是否使用等宽文本
+    func bodyFont(size: CGFloat) -> Font
     func headerFont(size: CGFloat) -> Font
     func groupTitleFont(size: CGFloat) -> Font
     func accentGradient(for colorScheme: ColorScheme) -> LinearGradient
     func successGradient(for colorScheme: ColorScheme) -> LinearGradient
     func cardBackgroundShape(cornerRadius: CGFloat) -> AnyShapeStyle
     func cardStroke(for colorScheme: ColorScheme, cornerRadius: CGFloat) -> AnyShapeStyle
+    /// 锁屏 Live Activity 的视觉语言（可被 Widget 独立消费）
+    var liveActivityLanguage: LiveActivityVisualLanguage { get }
+}
+
+/// 锁屏 Live Activity 与主 App 设计系统的桥接语言。
+enum LiveActivityVisualLanguage: String {
+    case ambientGlass
+    case flatReceipt
+    case skeuomorphism
+    case material
+    case minimal
+    case glassmorphism
+    case boldStats
+    case neoBrutal
+    case editorial
+    case aurora
+    case terminal
 }
 
 // MARK: - 风格 Token 实现
@@ -102,12 +148,10 @@ extension AppUIStyle: UIStyleTokens {
     func background(for colorScheme: ColorScheme) -> Color {
         switch self {
         case .ambientGlass:
-            // 精炼色板：暖灰系 off-black/off-white，避免纯黑
             return colorScheme == .dark
                 ? Color(red: 0.07, green: 0.07, blue: 0.09)
                 : Color(red: 0.96, green: 0.96, blue: 0.97)
         case .flatDesign:
-            // 小票纸张色：暖白米色 / 深炭灰
             return colorScheme == .dark
                 ? Color(red: 0.13, green: 0.13, blue: 0.12)
                 : Color(red: 0.95, green: 0.93, blue: 0.86)
@@ -129,16 +173,28 @@ extension AppUIStyle: UIStyleTokens {
             return colorScheme == .dark
                 ? Color(red: 0.07, green: 0.07, blue: 0.10)
                 : Color(red: 0.98, green: 0.97, blue: 0.95)
+        case .neoBrutal:
+            return colorScheme == .dark
+                ? Color(red: 0.08, green: 0.08, blue: 0.08)
+                : Color(red: 0.98, green: 0.96, blue: 0.90)
+        case .editorial:
+            return colorScheme == .dark
+                ? Color(red: 0.09, green: 0.08, blue: 0.07)
+                : Color(red: 0.98, green: 0.97, blue: 0.94)
+        case .aurora:
+            return colorScheme == .dark
+                ? Color(red: 0.05, green: 0.06, blue: 0.12)
+                : Color(red: 0.93, green: 0.95, blue: 1.0)
+        case .terminal:
+            return Color(red: 0.04, green: 0.06, blue: 0.05)
         }
     }
 
     func cardFill(for colorScheme: ColorScheme) -> Color {
         switch self {
         case .ambientGlass:
-            // 真玻璃：半透明 + 材质感
             return colorScheme == .dark ? Color.white.opacity(0.05) : Color.white.opacity(0.75)
         case .flatDesign:
-            // 小票：无填充，纯纸张
             return .clear
         case .skeuomorphism:
             return colorScheme == .dark
@@ -154,16 +210,22 @@ extension AppUIStyle: UIStyleTokens {
             return colorScheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.6)
         case .boldStats:
             return colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.9)
+        case .neoBrutal:
+            return colorScheme == .dark ? Color(red: 0.12, green: 0.12, blue: 0.12) : Color.white
+        case .editorial:
+            return colorScheme == .dark ? Color.white.opacity(0.04) : Color.white.opacity(0.9)
+        case .aurora:
+            return colorScheme == .dark ? Color.white.opacity(0.06) : Color.white.opacity(0.55)
+        case .terminal:
+            return Color(red: 0.06, green: 0.10, blue: 0.08).opacity(0.9)
         }
     }
 
     func cardBorder(for colorScheme: ColorScheme) -> Color {
         switch self {
         case .ambientGlass:
-            // 1px 内折射边框：白色高光
             return colorScheme == .dark ? Color.white.opacity(0.1) : Color.white.opacity(0.9)
         case .flatDesign:
-            // 小票虚线分隔色
             return colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.25)
         case .skeuomorphism:
             return colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.15)
@@ -175,13 +237,20 @@ extension AppUIStyle: UIStyleTokens {
             return colorScheme == .dark ? Color.white.opacity(0.15) : Color.white.opacity(0.8)
         case .boldStats:
             return colorScheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.08)
+        case .neoBrutal:
+            return colorScheme == .dark ? Color.white : Color.black
+        case .editorial:
+            return colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
+        case .aurora:
+            return Color.white.opacity(colorScheme == .dark ? 0.18 : 0.55)
+        case .terminal:
+            return Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.45)
         }
     }
 
     func cardShadow(for colorScheme: ColorScheme) -> Color {
         switch self {
         case .ambientGlass:
-            // 扩散阴影：宽而淡，偏背景色调
             return colorScheme == .dark ? Color.black.opacity(0.25) : Color.black.opacity(0.06)
         case .flatDesign:
             return .clear
@@ -195,42 +264,62 @@ extension AppUIStyle: UIStyleTokens {
             return colorScheme == .dark ? Color.black.opacity(0.2) : Color.black.opacity(0.06)
         case .boldStats:
             return colorScheme == .dark ? Color.black.opacity(0.25) : Color.black.opacity(0.06)
+        case .neoBrutal:
+            return Color.black.opacity(colorScheme == .dark ? 0.8 : 0.9)
+        case .editorial:
+            return Color.black.opacity(colorScheme == .dark ? 0.2 : 0.05)
+        case .aurora:
+            return Color.blue.opacity(colorScheme == .dark ? 0.25 : 0.1)
+        case .terminal:
+            return Color.green.opacity(0.15)
         }
     }
 
     var cornerRadius: CGFloat {
         switch self {
         case .ambientGlass: return 22
-        case .flatDesign: return 0  // 小票无圆角
+        case .flatDesign: return 0
         case .skeuomorphism: return 16
         case .materialDesign: return 16
         case .minimalism: return 0
         case .glassmorphism: return 24
         case .boldStats: return 20
+        case .neoBrutal: return 4
+        case .editorial: return 2
+        case .aurora: return 28
+        case .terminal: return 0
         }
     }
 
     var sectionSpacing: CGFloat {
         switch self {
         case .ambientGlass: return 24
-        case .flatDesign: return 18  // 小票紧凑间距
+        case .flatDesign: return 18
         case .skeuomorphism: return 18
         case .materialDesign: return 16
         case .minimalism: return 32
         case .glassmorphism: return 20
         case .boldStats: return 24
+        case .neoBrutal: return 16
+        case .editorial: return 28
+        case .aurora: return 22
+        case .terminal: return 14
         }
     }
 
     var groupSpacing: CGFloat {
         switch self {
         case .ambientGlass: return 14
-        case .flatDesign: return 8  // 小票紧凑行距
+        case .flatDesign: return 8
         case .skeuomorphism: return 14
         case .materialDesign: return 12
         case .minimalism: return 16
         case .glassmorphism: return 14
         case .boldStats: return 16
+        case .neoBrutal: return 10
+        case .editorial: return 18
+        case .aurora: return 14
+        case .terminal: return 8
         }
     }
 
@@ -243,72 +332,114 @@ extension AppUIStyle: UIStyleTokens {
         case .minimalism: return 12
         case .glassmorphism: return 12
         case .boldStats: return 14
+        case .neoBrutal: return 10
+        case .editorial: return 14
+        case .aurora: return 12
+        case .terminal: return 8
         }
     }
 
     var pagePadding: CGFloat {
         switch self {
         case .ambientGlass: return 20
-        case .flatDesign: return 24  // 小票宽边距，模拟纸张
+        case .flatDesign: return 24
         case .skeuomorphism: return 16
         case .materialDesign: return 16
         case .minimalism: return 24
         case .glassmorphism: return 20
         case .boldStats: return 20
+        case .neoBrutal: return 16
+        case .editorial: return 22
+        case .aurora: return 20
+        case .terminal: return 14
         }
     }
 
     var showAmbientBlobs: Bool {
         switch self {
-        case .ambientGlass, .glassmorphism, .boldStats: return true
-        case .flatDesign, .skeuomorphism, .materialDesign, .minimalism: return false
+        case .ambientGlass, .glassmorphism, .boldStats, .aurora: return true
+        case .flatDesign, .skeuomorphism, .materialDesign, .minimalism, .neoBrutal, .editorial, .terminal: return false
         }
     }
 
     var useDashedDividers: Bool {
-        self == .flatDesign
+        self == .flatDesign || self == .terminal
     }
 
     var useMonospaceText: Bool {
-        self == .flatDesign
+        self == .flatDesign || self == .terminal
+    }
+
+    var wrapsGroupsInCards: Bool {
+        switch self {
+        case .ambientGlass, .glassmorphism, .materialDesign, .skeuomorphism, .boldStats, .neoBrutal, .aurora:
+            return true
+        case .flatDesign, .minimalism, .editorial, .terminal:
+            return false
+        }
+    }
+
+    var usesBoldStatsLayout: Bool {
+        self == .boldStats || self == .neoBrutal
+    }
+
+    func bodyFont(size: CGFloat) -> Font {
+        switch self {
+        case .ambientGlass, .glassmorphism, .aurora:
+            return .system(size: size, weight: .medium, design: .rounded)
+        case .flatDesign, .terminal:
+            return .system(size: size, weight: .medium, design: .monospaced)
+        case .skeuomorphism, .editorial, .minimalism:
+            return .system(size: size, weight: self == .minimalism ? .regular : .medium, design: .serif)
+        case .materialDesign:
+            return .system(size: size, weight: .medium, design: .default)
+        case .boldStats, .neoBrutal:
+            return .system(size: size, weight: self == .neoBrutal ? .heavy : .semibold, design: .rounded)
+        }
     }
 
     func headerFont(size: CGFloat) -> Font {
         switch self {
-        case .ambientGlass, .glassmorphism, .boldStats:
+        case .ambientGlass, .glassmorphism, .boldStats, .aurora:
             return .system(size: size, weight: .bold, design: .rounded)
-        case .flatDesign:
+        case .flatDesign, .terminal:
             return .system(size: size, weight: .bold, design: .monospaced)
-        case .skeuomorphism:
+        case .skeuomorphism, .editorial:
             return .system(size: size, weight: .heavy, design: .serif)
         case .materialDesign:
             return .system(size: size, weight: .bold, design: .default)
         case .minimalism:
             return .system(size: size, weight: .light, design: .serif)
+        case .neoBrutal:
+            return .system(size: size, weight: .black, design: .rounded)
         }
     }
 
     func groupTitleFont(size: CGFloat) -> Font {
         switch self {
-        case .ambientGlass, .glassmorphism, .boldStats:
+        case .ambientGlass, .glassmorphism, .boldStats, .aurora:
             return .system(size: size, weight: .bold, design: .rounded)
-        case .flatDesign:
+        case .flatDesign, .terminal:
             return .system(size: size, weight: .semibold, design: .monospaced)
-        case .skeuomorphism:
+        case .skeuomorphism, .editorial:
             return .system(size: size, weight: .bold, design: .serif)
         case .materialDesign:
             return .system(size: size, weight: .semibold, design: .default)
         case .minimalism:
             return .system(size: size, weight: .medium, design: .serif)
+        case .neoBrutal:
+            return .system(size: size, weight: .black, design: .rounded)
         }
     }
 
     func accentGradient(for colorScheme: ColorScheme) -> LinearGradient {
         switch self {
-        case .ambientGlass, .glassmorphism:
+        case .ambientGlass:
             return LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .glassmorphism:
+            return LinearGradient(colors: [.purple, .pink.opacity(0.85), .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .flatDesign:
-            return LinearGradient(colors: [.blue], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return LinearGradient(colors: [Color(red: 0.15, green: 0.15, blue: 0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .skeuomorphism:
             return LinearGradient(
                 colors: [Color(red: 0.2, green: 0.4, blue: 0.7), Color(red: 0.3, green: 0.5, blue: 0.8)],
@@ -320,16 +451,19 @@ extension AppUIStyle: UIStyleTokens {
             return LinearGradient(colors: [.primary], startPoint: .topLeading, endPoint: .bottomTrailing)
         case .boldStats:
             return LinearGradient(colors: [.orange, .yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .neoBrutal:
+            return LinearGradient(colors: [Color(red: 1.0, green: 0.84, blue: 0.0), Color.orange], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .editorial:
+            return LinearGradient(colors: [Color(red: 0.55, green: 0.12, blue: 0.18), Color(red: 0.75, green: 0.25, blue: 0.3)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .aurora:
+            return LinearGradient(colors: [.cyan, .purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .terminal:
+            return LinearGradient(colors: [Color(red: 0.2, green: 0.95, blue: 0.45)], startPoint: .topLeading, endPoint: .bottomTrailing)
         }
     }
 
     func successGradient(for colorScheme: ColorScheme) -> LinearGradient {
-        switch self {
-        case .boldStats:
-            return LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
-        default:
-            return LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
+        LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     func cardBackgroundShape(cornerRadius: CGFloat) -> AnyShapeStyle {
@@ -343,14 +477,31 @@ extension AppUIStyle: UIStyleTokens {
                 )
             )
         default:
-            return AnyShapeStyle(cardFill(for: .dark)) // placeholder, actual color passed at call site
+            return AnyShapeStyle(cardFill(for: .dark))
         }
     }
 
     func cardStroke(for colorScheme: ColorScheme, cornerRadius: CGFloat) -> AnyShapeStyle {
-        return AnyShapeStyle(cardBorder(for: colorScheme))
+        AnyShapeStyle(cardBorder(for: colorScheme))
+    }
+
+    var liveActivityLanguage: LiveActivityVisualLanguage {
+        switch self {
+        case .ambientGlass: return .ambientGlass
+        case .flatDesign: return .flatReceipt
+        case .skeuomorphism: return .skeuomorphism
+        case .materialDesign: return .material
+        case .minimalism: return .minimal
+        case .glassmorphism: return .glassmorphism
+        case .boldStats: return .boldStats
+        case .neoBrutal: return .neoBrutal
+        case .editorial: return .editorial
+        case .aurora: return .aurora
+        case .terminal: return .terminal
+        }
     }
 }
+
 
 // MARK: - 当前风格管理（ObservableObject 支持热切换）
 
@@ -360,13 +511,15 @@ final class UIStyleManager: ObservableObject {
 
     @Published var selectedStyle: AppUIStyle {
         didSet {
-            UserDefaults(suiteName: appGroupID)?.set(selectedStyle.rawValue, forKey: "selectedUIStyle")
+            UserDefaults(suiteName: appGroupID)?.set(selectedStyle.rawValue, forKey: selectedUIStyleKey)
+            // 通知主界面触发 Activity 同步；renderVersion 也会因 style key 变化而刷新。
+            NotificationCenter.default.post(name: .focusLiveUIStyleDidChange, object: selectedStyle.rawValue)
         }
     }
 
     private init() {
         let defaults = UserDefaults(suiteName: appGroupID)
-        let raw = defaults?.string(forKey: "selectedUIStyle") ?? AppUIStyle.ambientGlass.rawValue
+        let raw = defaults?.string(forKey: selectedUIStyleKey) ?? AppUIStyle.ambientGlass.rawValue
         self.selectedStyle = AppUIStyle(rawValue: raw) ?? .ambientGlass
     }
 }
@@ -380,80 +533,173 @@ struct StyledGlassCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         let cr = style.cornerRadius
         content
-            .background(
-                Group {
-                    if style == .minimalism || style == .flatDesign {
-                        // 小票/极简：无背景，无阴影，纯纸张
-                        Color.clear
-                    } else if style == .ambientGlass {
-                        // 真玻璃折射：底色 + 内边框高光 + 内阴影 + 外扩散阴影
-                        RoundedRectangle(cornerRadius: cr, style: .continuous)
-                            .fill(style.cardFill(for: colorScheme))
-                            .overlay(
-                                // 1px 内折射边框：顶部高光
-                                RoundedRectangle(cornerRadius: cr, style: .continuous)
-                                    .stroke(
-                                        LinearGradient(
-                                            colors: colorScheme == .dark
-                                                ? [Color.white.opacity(0.12), Color.white.opacity(0.04)]
-                                                : [Color.white.opacity(0.9), Color.white.opacity(0.3)],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        ),
-                                        lineWidth: 1
-                                    )
-                            )
-                            .overlay(
-                                // 内阴影：模拟玻璃边缘折射
-                                RoundedRectangle(cornerRadius: cr, style: .continuous)
-                                    .stroke(
-                                        LinearGradient(
-                                            colors: colorScheme == .dark
-                                                ? [Color.black.opacity(0.15), Color.clear]
-                                                : [Color.black.opacity(0.04), Color.clear],
-                                            startPoint: .bottom,
-                                            endPoint: .top
-                                        ),
-                                        lineWidth: 1
-                                    )
-                            )
-                    } else if style == .skeuomorphism {
-                        RoundedRectangle(cornerRadius: cr, style: .continuous)
-                            .fill(style.cardFill(for: colorScheme))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: cr, style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [Color.white.opacity(0.05), Color.clear],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                    )
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: cr, style: .continuous)
-                                    .stroke(style.cardBorder(for: colorScheme), lineWidth: 1)
-                            )
-                    } else if style == .glassmorphism {
-                        RoundedRectangle(cornerRadius: cr, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: cr, style: .continuous)
-                                    .stroke(Color.white.opacity(colorScheme == .dark ? 0.15 : 0.5), lineWidth: 0.5)
-                            )
-                    } else {
-                        RoundedRectangle(cornerRadius: cr, style: .continuous)
-                            .fill(style.cardFill(for: colorScheme))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: cr, style: .continuous)
-                                    .stroke(style.cardBorder(for: colorScheme), lineWidth: 0.5)
-                            )
-                    }
-                }
+            .background {
+                cardBackground(cornerRadius: cr)
+            }
+            .shadow(
+                color: style.cardShadow(for: colorScheme),
+                radius: shadowRadius,
+                y: shadowY
             )
-            // 扩散阴影：宽而淡
-            .shadow(color: style.cardShadow(for: colorScheme), radius: style == .skeuomorphism ? 12 : 15, y: style == .skeuomorphism ? 6 : 5)
     }
+
+    private var shadowRadius: CGFloat {
+        switch style {
+        case .skeuomorphism: return 14
+        case .materialDesign: return 8
+        case .boldStats: return 18
+        case .ambientGlass, .glassmorphism, .aurora: return 16
+        case .neoBrutal: return 0
+        case .editorial: return 6
+        case .flatDesign, .minimalism, .terminal: return 0
+        }
+    }
+
+    private var shadowY: CGFloat {
+        switch style {
+        case .skeuomorphism: return 8
+        case .boldStats: return 10
+        case .materialDesign: return 4
+        case .neoBrutal: return 0
+        case .editorial: return 3
+        default: return 6
+        }
+    }
+
+    @ViewBuilder
+    private func cardBackground(cornerRadius cr: CGFloat) -> some View {
+        switch style {
+        case .minimalism, .flatDesign, .editorial, .terminal:
+            if style == .editorial {
+                RoundedRectangle(cornerRadius: cr, style: .continuous)
+                    .fill(style.cardFill(for: colorScheme))
+                    .overlay(alignment: .leading) {
+                        Rectangle().fill(style.accentColor).frame(width: 3)
+                    }
+            } else if style == .terminal {
+                RoundedRectangle(cornerRadius: cr, style: .continuous)
+                    .fill(style.cardFill(for: colorScheme))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cr, style: .continuous)
+                            .stroke(Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.5), lineWidth: 1)
+                    )
+            } else {
+                Color.clear
+            }
+
+        case .ambientGlass:
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(style.cardFill(for: colorScheme))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cr, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: cr, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: colorScheme == .dark
+                                    ? [Color.white.opacity(0.18), Color.white.opacity(0.04)]
+                                    : [Color.white.opacity(0.95), Color.white.opacity(0.25)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 1
+                        )
+                )
+
+        case .glassmorphism, .aurora:
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: cr, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: style == .aurora
+                                    ? [Color.cyan.opacity(0.14), Color.purple.opacity(0.1), Color.pink.opacity(0.08)]
+                                    : [
+                                        Color.purple.opacity(colorScheme == .dark ? 0.12 : 0.08),
+                                        Color.blue.opacity(colorScheme == .dark ? 0.08 : 0.04)
+                                    ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: cr, style: .continuous)
+                        .stroke(Color.white.opacity(colorScheme == .dark ? 0.22 : 0.55), lineWidth: 0.8)
+                )
+
+        case .skeuomorphism:
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: colorScheme == .dark
+                            ? [Color(red: 0.22, green: 0.22, blue: 0.25), Color(red: 0.14, green: 0.14, blue: 0.16)]
+                            : [Color(red: 0.97, green: 0.96, blue: 0.93), Color(red: 0.88, green: 0.86, blue: 0.82)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: cr, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(colorScheme == .dark ? 0.18 : 0.7),
+                                    Color.black.opacity(colorScheme == .dark ? 0.35 : 0.12)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 1.2
+                        )
+                )
+
+        case .materialDesign:
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(style.cardFill(for: colorScheme))
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(Color.teal.opacity(colorScheme == .dark ? 0.55 : 0.75))
+                        .frame(height: 4)
+                        .clipShape(RoundedRectangle(cornerRadius: cr, style: .continuous))
+                        .mask(
+                            VStack(spacing: 0) {
+                                Rectangle().frame(height: 4)
+                                Spacer(minLength: 0)
+                            }
+                        )
+                }
+
+        case .boldStats:
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(style.cardFill(for: colorScheme))
+                .overlay(
+                    RoundedRectangle(cornerRadius: cr, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.orange.opacity(0.55), Color.yellow.opacity(0.2)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.2
+                        )
+                )
+
+        case .neoBrutal:
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(style.cardFill(for: colorScheme))
+                .overlay(
+                    RoundedRectangle(cornerRadius: cr, style: .continuous)
+                        .stroke(Color.primary, lineWidth: 2.5)
+                )
+                .background(
+                    RoundedRectangle(cornerRadius: cr, style: .continuous)
+                        .fill(Color.primary)
+                        .offset(x: 4, y: 4)
+                )
+        }
+    }
+
 }
 
 extension View {
@@ -468,11 +714,20 @@ extension View {
 }
 
 struct PressFeedbackStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+            // 按下不是 momentum 手势，应即时下沉、无 overshoot。
+            // reduceMotion：去掉缩放与弹簧，保留极短淡入做反馈。
+            .animation(
+                reduceMotion
+                    ? .easeOut(duration: 0.12)
+                    : MotionTokens.press,
+                value: configuration.isPressed
+            )
     }
 }
 
@@ -537,6 +792,7 @@ struct ReceiptHeader: View {
 
 struct AmbientBlobs: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let style: AppUIStyle
     @State private var animateBlobs = false
 
@@ -582,7 +838,7 @@ struct AmbientBlobs: View {
                     .opacity(animateBlobs ? 0.8 : 1)
 
                 // 光晕 3：紫色点缀
-                if style == .ambientGlass || style == .glassmorphism {
+                if style == .ambientGlass || style == .glassmorphism || style == .aurora {
                     Circle()
                         .fill(Color.purple.opacity(colorScheme == .dark ? 0.10 : 0.06))
                         .frame(width: 200, height: 200)
@@ -594,8 +850,10 @@ struct AmbientBlobs: View {
             .allowsHitTesting(false)
             .accessibilityHidden(true)
             .onAppear {
-                // 8 秒周期缓慢浮动，营造空间呼吸感
-                withAnimation(.easeInOut(duration: 8).repeatForever(autoreverses: true)) {
+                // reduceMotion: 静止停在中间态，不启动持续循环。
+                // 正常：4 秒缓慢浮动，远离 0.2Hz（5s 周期）的前庭触发区间。
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) {
                     animateBlobs = true
                 }
             }

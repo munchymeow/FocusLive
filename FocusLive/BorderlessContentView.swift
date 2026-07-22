@@ -15,6 +15,7 @@ struct BorderlessContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var uiStyle: UIStyleManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query private var taskGroups: [TaskGroup]
 
     private var style: AppUIStyle { uiStyle.selectedStyle }
@@ -28,6 +29,7 @@ struct BorderlessContentView: View {
     @State private var lastNonPrivateFilter: TaskFilter = .all
     @State private var pendingAddTaskType: TaskType = .todo
     @State private var pendingPrivateGroupCreation = false
+    @Namespace private var borderlessFilterNamespace
 
     // 首次启动教程
     @State private var showFirstLaunchTutorial = false
@@ -192,6 +194,7 @@ struct BorderlessContentView: View {
         ZStack {
             style.background(for: colorScheme).ignoresSafeArea()
             AmbientBlobs(style: style)
+            styleAtmosphereLayer
 
             ScrollView {
                 VStack(alignment: .leading, spacing: style.sectionSpacing) {
@@ -215,6 +218,12 @@ struct BorderlessContentView: View {
         .onChange(of: taskGroups) { _, _ in syncActivitiesWithGroups() }
         .onChange(of: scenePhase) { _, newPhase in handleScenePhaseChange(newPhase) }
         .onChange(of: activeFilter) { _, newValue in handleFilterChange(newValue) }
+        .onChange(of: uiStyle.selectedStyle) { _, _ in
+            syncActivitiesWithGroups()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .focusLiveUIStyleDidChange)) { _ in
+            syncActivitiesWithGroups()
+        }
         .modifier(BorderlessAlerts(
             privacyAlertMessage: privacyAlertMessage,
             showPrivacyAlert: $showPrivacyAlert,
@@ -258,77 +267,239 @@ struct BorderlessContentView: View {
         presentFirstLaunchTutorialIfNeeded()
     }
 
+    // MARK: - 风格氛围层（极端布局分型）
+
+    @ViewBuilder
+    private var styleAtmosphereLayer: some View {
+        switch style {
+        case .terminal:
+            VStack(spacing: 3) {
+                ForEach(0..<80, id: \.self) { _ in
+                    Rectangle()
+                        .fill(Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.045))
+                        .frame(height: 1)
+                }
+            }
+            .allowsHitTesting(false)
+            .ignoresSafeArea()
+        case .aurora:
+            ZStack {
+                Circle()
+                    .fill(Color.cyan.opacity(0.22))
+                    .frame(width: 260, height: 260)
+                    .blur(radius: 55)
+                    .offset(x: -120, y: -180)
+                Circle()
+                    .fill(Color.purple.opacity(0.18))
+                    .frame(width: 220, height: 220)
+                    .blur(radius: 50)
+                    .offset(x: 130, y: 120)
+                Circle()
+                    .fill(Color.pink.opacity(0.12))
+                    .frame(width: 180, height: 180)
+                    .blur(radius: 40)
+                    .offset(x: 40, y: -40)
+            }
+            .allowsHitTesting(false)
+            .ignoresSafeArea()
+        case .neoBrutal:
+            RoundedRectangle(cornerRadius: 0)
+                .fill(style.accentColor.opacity(0.16))
+                .frame(width: 120, height: 120)
+                .overlay(RoundedRectangle(cornerRadius: 0).stroke(Color.primary, lineWidth: 2))
+                .rotationEffect(.degrees(-8))
+                .offset(x: 140, y: -220)
+                .allowsHitTesting(false)
+        case .editorial:
+            HStack {
+                Rectangle()
+                    .fill(style.accentColor.opacity(0.55))
+                    .frame(width: 3)
+                Spacer()
+            }
+            .padding(.leading, 8)
+            .allowsHitTesting(false)
+            .ignoresSafeArea()
+        default:
+            EmptyView()
+        }
+    }
+
     // MARK: - 无界标题
 
     private var borderlessHeader: some View {
+        Group {
+            switch style {
+            case .editorial:
+                editorialHeader
+            case .terminal:
+                terminalHeader
+            case .neoBrutal:
+                neoBrutalHeader
+            case .aurora:
+                auroraHeader
+            default:
+                defaultBorderlessHeader
+            }
+        }
+    }
+
+    private var addGroupMenu: some View {
+        Menu {
+            Button { addNewGroup(taskType: .todo) } label: {
+                Label(String(localized: "传统待办事项"), systemImage: "checklist")
+            }
+            Button { addNewGroup(taskType: .dailyCheckIn) } label: {
+                Label(String(localized: "每日打卡"), systemImage: "calendar.badge.clock")
+            }
+            Button { addNewGroup(taskType: .reminder) } label: {
+                Label(String(localized: "提醒事项"), systemImage: "bell.badge.fill")
+            }
+        } label: {
+            if style.useDashedDividers || style == .terminal {
+                Text(style == .terminal ? "+ new" : "[ + ]")
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .foregroundStyle(style == .terminal ? Color(red: 0.2, green: 0.95, blue: 0.45) : .primary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 0)
+                            .stroke(style.cardBorder(for: colorScheme), style: StrokeStyle(lineWidth: 1, dash: style == .terminal ? [] : [3]))
+                    )
+            } else if style == .neoBrutal {
+                Text("+")
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .frame(width: 42, height: 42)
+                    .background(style.accentColor)
+                    .overlay(Rectangle().stroke(Color.primary, lineWidth: 2.5))
+                    .background(Rectangle().fill(Color.primary).offset(x: 4, y: 4))
+            } else {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(style.accentGradient(for: colorScheme)))
+                    .overlay(
+                        Circle()
+                            .stroke(
+                                LinearGradient(
+                                    colors: [.white.opacity(0.4), .white.opacity(0.05)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 1
+                            )
+                    )
+                    .shadow(color: style.accentColor.opacity(0.35), radius: 10, y: 5)
+            }
+        }
+        .buttonStyle(PressFeedbackStyle())
+        .accessibilityLabel(String(localized: "添加新分组"))
+    }
+
+    private var defaultBorderlessHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // 小票风格：顶部装饰头
             if style.useDashedDividers {
                 ReceiptHeader(title: String(localized: "FOCUS LIVE"), style: style)
                     .padding(.bottom, 12)
             }
-
             HStack(alignment: .lastTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(LocalizedStringKey(activeFilter.titleKey))
-                        .font(style.useMonospaceText
-                              ? .system(size: 24, weight: .bold, design: .monospaced)
-                              : .system(size: 28, weight: .bold, design: .rounded))
+                        .font(style.headerFont(size: style == .minimalism ? 30 : 28))
+                        .tracking(style == .minimalism ? -0.4 : (style.useDashedDividers ? 1.0 : 0))
                     Text(String(format: String(localized: "%lld 个分组"), Int64(filteredGroupEntries.count)))
-                        .font(style.useMonospaceText
-                              ? .system(size: 13, weight: .regular, design: .monospaced)
-                              : .subheadline)
+                        .font(style.bodyFont(size: 13))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-
-                // Flat 风格 FAB 也用等宽风格
-                Menu {
-                    Button { addNewGroup(taskType: .todo) } label: {
-                        Label(String(localized: "传统待办事项"), systemImage: "checklist")
-                    }
-                    Button { addNewGroup(taskType: .dailyCheckIn) } label: {
-                        Label(String(localized: "每日打卡"), systemImage: "calendar.badge.clock")
-                    }
-                    Button { addNewGroup(taskType: .reminder) } label: {
-                        Label(String(localized: "提醒事项"), systemImage: "bell.badge.fill")
-                    }
-                } label: {
-                    if style.useDashedDividers {
-                        // 小票风格：方框 + 虚线边框
-                        Text("[ + ]")
-                            .font(.system(size: 16, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 0)
-                                    .stroke(style.cardBorder(for: colorScheme), style: StrokeStyle(lineWidth: 1, dash: [3]))
-                            )
-                    } else {
-                        Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 38, height: 38)
-                            .background(Circle().fill(style.accentGradient(for: colorScheme)))
-                            // 内折射高光
-                            .overlay(
-                                Circle()
-                                    .stroke(
-                                        LinearGradient(
-                                            colors: [.white.opacity(0.4), .white.opacity(0.05)],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        ),
-                                        lineWidth: 1
-                                    )
-                            )
-                            .shadow(color: Color.blue.opacity(0.35), radius: 10, y: 5)
-                    }
-                }
-                .buttonStyle(PressFeedbackStyle())
-                .accessibilityLabel(String(localized: "添加新分组"))
+                addGroupMenu
             }
+        }
+    }
+
+    /// Editorial：杂志双栏标题 —— 左侧大标题、右侧元信息 + 操作
+    private var editorialHeader: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("FOCUS")
+                    .font(.system(size: 11, weight: .semibold, design: .serif))
+                    .tracking(3)
+                    .foregroundStyle(style.accentColor)
+                Text(LocalizedStringKey(activeFilter.titleKey))
+                    .font(style.headerFont(size: 36))
+                    .tracking(-0.8)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 10) {
+                Text(String(format: String(localized: "%lld 个分组"), Int64(filteredGroupEntries.count)))
+                    .font(style.bodyFont(size: 12))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+                addGroupMenu
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// Terminal：命令行提示符头
+    private var terminalHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("focuslive@device:~$ ls --filter \(activeFilter.rawValue)")
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.75))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            HStack(alignment: .center) {
+                Text(activeFilter.rawValue.uppercased())
+                    .font(style.headerFont(size: 26))
+                    .foregroundStyle(Color(red: 0.2, green: 0.95, blue: 0.45))
+                Spacer()
+                addGroupMenu
+            }
+            Text(String(format: "groups=%lld", Int64(filteredGroupEntries.count)))
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .foregroundStyle(Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.65))
+        }
+    }
+
+    /// Neo Brutal：错位硬边标题块
+    private var neoBrutalHeader: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(LocalizedStringKey(activeFilter.titleKey))
+                .font(style.headerFont(size: 28))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(style.accentColor)
+                .overlay(Rectangle().stroke(Color.primary, lineWidth: 2.5))
+                .background(Rectangle().fill(Color.primary).offset(x: 5, y: 5))
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(String(format: String(localized: "%lld 个分组"), Int64(filteredGroupEntries.count)))
+                    .font(style.bodyFont(size: 12).weight(.bold))
+                addGroupMenu
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// Aurora：渐变标题 + 轻玻璃操作
+    private var auroraHeader: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(LocalizedStringKey(activeFilter.titleKey))
+                    .font(style.headerFont(size: 30))
+                    .foregroundStyle(style.accentGradient(for: colorScheme))
+                Text(String(format: String(localized: "%lld 个分组"), Int64(filteredGroupEntries.count)))
+                    .font(style.bodyFont(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            addGroupMenu
         }
     }
 
@@ -347,7 +518,7 @@ struct BorderlessContentView: View {
     private func filterPill(_ filter: TaskFilter) -> some View {
         let isActive = activeFilter == filter
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                 if filter == .privateSpace && !isProUser {
                     showSubscriptionSheet = true
                 } else {
@@ -386,6 +557,7 @@ struct BorderlessContentView: View {
     @ViewBuilder
     private func filterPillBackground(isActive: Bool) -> some View {
         if style.useDashedDividers {
+            // 小票风格：下划线高亮，不使用滑动几何
             Rectangle()
                 .fill(Color.clear)
                 .overlay(alignment: .bottom) {
@@ -396,8 +568,10 @@ struct BorderlessContentView: View {
                     }
                 }
         } else if isActive {
+            // 激活药丸作为唯一具名几何体，在 tab 间滑动
             Capsule()
                 .fill(style.accentGradient(for: colorScheme))
+                .matchedGeometryEffect(id: "borderlessFilterActivePill", in: borderlessFilterNamespace)
                 .shadow(color: Color.blue.opacity(0.25), radius: 6, y: 3)
         } else {
             Capsule()
@@ -427,6 +601,8 @@ struct BorderlessContentView: View {
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text("\(total)")
+                            .contentTransition(.numericText(countsDown: false))
+                            .animation(.snappy(duration: 0.2), value: total)
                             .font(.system(size: 13, weight: .bold, design: .monospaced))
                     }
                     HStack {
@@ -435,6 +611,8 @@ struct BorderlessContentView: View {
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text("\(completed)")
+                            .contentTransition(.numericText(countsDown: false))
+                            .animation(.snappy(duration: 0.2), value: completed)
                             .font(.system(size: 13, weight: .bold, design: .monospaced))
                     }
                     HStack {
@@ -449,11 +627,49 @@ struct BorderlessContentView: View {
                     ReceiptDivider(style: style)
                 }
                 .padding(.horizontal, 4)
+            } else if style.usesBoldStatsLayout {
+                HStack(alignment: .bottom, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("\(Int(progress * 100))")
+                            .font(.system(size: 44, weight: .heavy, design: .rounded))
+                            .foregroundStyle(style.accentGradient(for: colorScheme))
+                            .contentTransition(.numericText(countsDown: false))
+                            .animation(.snappy(duration: 0.25), value: progress)
+                        Text("%")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(String(localized: "完成"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(completed)/\(total)")
+                                .font(.title3.weight(.bold).monospacedDigit())
+                                .contentTransition(.numericText(countsDown: false))
+                        }
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(style.accentColor.opacity(0.15))
+                                Capsule()
+                                    .fill(style.accentGradient(for: colorScheme))
+                                    .frame(width: max(8, geo.size.width * progress))
+                            }
+                        }
+                        .frame(height: 8)
+                        Text(String(format: String(localized: "%lld 个分组"), Int64(filteredGroupEntries.count)))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(18)
+                .styledGlassCard(style)
             } else {
                 HStack(spacing: 16) {
                     ZStack {
                         Circle()
-                            .stroke(Color.blue.opacity(colorScheme == .dark ? 0.15 : 0.12), lineWidth: 5)
+                            .stroke(style.accentColor.opacity(colorScheme == .dark ? 0.18 : 0.12), lineWidth: 5)
                             .frame(width: 48, height: 48)
                         Circle()
                             .trim(from: 0, to: progress)
@@ -462,15 +678,15 @@ struct BorderlessContentView: View {
                             .rotationEffect(.degrees(-90))
                             .animation(.easeInOut(duration: 0.4), value: progress)
                         Text("\(Int(progress * 100))%")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .font(style.bodyFont(size: 11).weight(.bold))
                             .foregroundStyle(style.accentGradient(for: colorScheme))
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(String(format: String(localized: "%lld/%lld 已完成"), Int64(completed), Int64(total)))
-                            .font(.subheadline.weight(.medium))
+                            .font(style.bodyFont(size: 15))
                             .foregroundStyle(.primary)
                         Text(String(format: String(localized: "%lld 个分组"), Int64(filteredGroupEntries.count)))
-                            .font(.caption)
+                            .font(style.bodyFont(size: 12))
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -498,63 +714,194 @@ struct BorderlessContentView: View {
     // MARK: - 无界分组（留白驱动，无卡片）
 
     private func borderlessGroupSection(group: TaskGroup, tasks: [TaskItem]) -> some View {
-        VStack(alignment: .leading, spacing: style.groupSpacing) {
-            // 分组标题：图标 + 名称 + 计数
-            HStack(spacing: 12) {
-                if !style.useDashedDividers {
-                    GroupIcon(name: group.iconName, size: 18, tint: .blue)
-                }
-                Text(style.useDashedDividers ? group.title.uppercased() : group.title)
-                    .font(style.useMonospaceText
-                          ? .system(size: 17, weight: .bold, design: .monospaced)
-                          : .system(size: 20, weight: .bold))
-                    .tracking(style.useDashedDividers ? 0.5 : 0)
-                Spacer()
-                let completed = tasks.filter { $0.isCompleted }.count
-                Text("\(completed)/\(tasks.count)")
-                    .font(style.useMonospaceText
-                          ? .system(size: 13, weight: .medium, design: .monospaced)
-                          : .subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 4)
+        let completed = tasks.filter { $0.isCompleted }.count
+        let content = VStack(alignment: .leading, spacing: style.groupSpacing) {
+            groupSectionHeader(group: group, completed: completed, total: tasks.count)
 
-            // 任务列表：用分隔线而非卡片分隔
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: style == .neoBrutal ? 8 : 0) {
                 ForEach(Array(tasks.enumerated()), id: \.element.id) { index, task in
-                    borderlessTaskRow(task: task, group: group)
-                    if index < tasks.count - 1 {
-                        ReceiptDivider(style: style, leadingIndent: 42)
+                    if style == .neoBrutal {
+                        borderlessTaskRow(task: task, group: group)
+                            .padding(10)
+                            .background(colorScheme == .dark ? Color(red: 0.18, green: 0.18, blue: 0.18) : Color.white)
+                            .overlay(Rectangle().stroke(Color.primary, lineWidth: 1.5))
+                            .background(Rectangle().fill(Color.primary).offset(x: 3, y: 3))
+                            .padding(.bottom, 4)
+                    } else {
+                        borderlessTaskRow(task: task, group: group)
+                        if index < tasks.count - 1 {
+                            if style.useDashedDividers || style == .terminal {
+                                ReceiptDivider(style: style, leadingIndent: style == .terminal ? 0 : 42)
+                            } else if style == .editorial {
+                                Divider().opacity(0.2)
+                            } else if style == .minimalism {
+                                Divider().opacity(0.25).padding(.leading, 36)
+                            } else {
+                                Divider().opacity(0.35).padding(.leading, 36)
+                            }
+                        }
                     }
                 }
             }
 
-            // 分组间虚线分隔（小票风格）
-            if style.useDashedDividers {
+            if style.useDashedDividers && style != .terminal {
                 ReceiptDivider(style: style)
                     .padding(.top, 4)
             }
 
-            // 添加任务按钮
             Button(action: { addTask(to: group) }) {
                 HStack(spacing: 6) {
-                    if style.useDashedDividers {
-                        Text("[ + ]")
+                    if style.useDashedDividers || style == .terminal {
+                        Text(style == .terminal ? "+ add" : "[ + ]")
                             .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    } else if style == .neoBrutal {
+                        Text("+ ADD")
+                            .font(.system(size: 12, weight: .black, design: .rounded))
                     } else {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 14))
                     }
-                    Text(addTaskButtonTitle(for: group))
-                        .font(style.useMonospaceText
-                              ? .system(size: 13, weight: .semibold, design: .monospaced)
-                              : .subheadline)
+                    if style != .neoBrutal && style != .terminal {
+                        Text(addTaskButtonTitle(for: group))
+                            .font(style.bodyFont(size: 13).weight(.semibold))
+                    } else if style == .terminal {
+                        Text(addTaskButtonTitle(for: group))
+                            .font(style.bodyFont(size: 13).weight(.semibold))
+                    }
                 }
-                .foregroundStyle(style.accentColor)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 4)
+                .foregroundStyle(style == .terminal ? Color(red: 0.2, green: 0.95, blue: 0.45) : style.accentColor)
+                .padding(.vertical, style == .neoBrutal ? 10 : 8)
+                .padding(.horizontal, style.wrapsGroupsInCards ? 2 : 4)
+                .frame(maxWidth: style == .neoBrutal ? .infinity : nil, alignment: .leading)
+                .background {
+                    if style == .neoBrutal {
+                        Rectangle().fill(style.accentColor.opacity(0.35))
+                            .overlay(Rectangle().stroke(Color.primary, lineWidth: 2))
+                    }
+                }
             }
             .buttonStyle(PressFeedbackStyle())
+        }
+
+        return Group {
+            if style == .neoBrutal {
+                content
+                    .padding(14)
+                    .background(colorScheme == .dark ? Color(red: 0.12, green: 0.12, blue: 0.12) : Color(red: 0.99, green: 0.98, blue: 0.94))
+                    .overlay(Rectangle().stroke(Color.primary, lineWidth: 2.5))
+                    .background(Rectangle().fill(Color.primary).offset(x: 6, y: 6))
+                    .padding(.bottom, 8)
+            } else if style == .editorial {
+                content
+                    .padding(.vertical, 10)
+                    .padding(.leading, 12)
+                    .overlay(alignment: .leading) {
+                        Rectangle()
+                            .fill(style.accentColor)
+                            .frame(width: 2)
+                    }
+            } else if style == .terminal {
+                content
+                    .padding(12)
+                    .overlay(
+                        Rectangle()
+                            .stroke(Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.35), lineWidth: 1)
+                    )
+            } else if style.wrapsGroupsInCards {
+                content
+                    .padding(14)
+                    .styledGlassCard(style)
+            } else {
+                content
+                    .padding(.vertical, style == .minimalism ? 8 : 0)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func groupSectionHeader(group: TaskGroup, completed: Int, total: Int) -> some View {
+        switch style {
+        case .editorial:
+            // 双栏：左标题 / 右进度
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(group.title)
+                        .font(style.groupTitleFont(size: 24))
+                        .tracking(-0.4)
+                    if !group.iconName.isEmpty {
+                        GroupIcon(name: group.iconName, size: 14, tint: style.accentColor, showsChrome: false)
+                    }
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(completed)")
+                        .font(style.headerFont(size: 28))
+                        .foregroundStyle(style.accentColor)
+                        .contentTransition(.numericText(countsDown: false))
+                    Text("/ \(total)")
+                        .font(style.bodyFont(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        case .terminal:
+            HStack(spacing: 8) {
+                Text("##")
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.7))
+                Text(group.title)
+                    .font(style.groupTitleFont(size: 16))
+                    .foregroundStyle(Color(red: 0.2, green: 0.95, blue: 0.45))
+                Spacer()
+                Text("\(completed)/\(total)")
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.8))
+                    .contentTransition(.numericText(countsDown: false))
+            }
+        case .neoBrutal:
+            HStack(spacing: 10) {
+                GroupIcon(name: group.iconName, size: 16, tint: .primary, showsChrome: false)
+                    .padding(6)
+                    .background(style.accentColor)
+                    .overlay(Rectangle().stroke(Color.primary, lineWidth: 2))
+                Text(group.title.uppercased())
+                    .font(style.groupTitleFont(size: 18))
+                Spacer()
+                Text("\(completed)/\(total)")
+                    .font(style.bodyFont(size: 14).weight(.black))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.primary.opacity(0.08))
+                    .overlay(Rectangle().stroke(Color.primary, lineWidth: 1.5))
+                    .contentTransition(.numericText(countsDown: false))
+            }
+        case .aurora:
+            HStack(spacing: 12) {
+                GroupIcon(name: group.iconName, size: 18, tint: style.accentColor)
+                Text(group.title)
+                    .font(style.groupTitleFont(size: 20))
+                    .foregroundStyle(style.accentGradient(for: colorScheme))
+                Spacer()
+                Text("\(completed)/\(total)")
+                    .font(style.bodyFont(size: 13).weight(.semibold))
+                    .foregroundStyle(style.accentColor)
+                    .contentTransition(.numericText(countsDown: false))
+            }
+        default:
+            HStack(spacing: 12) {
+                if !style.useDashedDividers {
+                    GroupIcon(name: group.iconName, size: 18, tint: style.accentColor)
+                }
+                Text(style.useDashedDividers ? group.title.uppercased() : group.title)
+                    .font(style.groupTitleFont(size: style == .minimalism ? 22 : 19))
+                    .tracking(style.useDashedDividers ? 0.5 : (style == .minimalism ? -0.3 : 0))
+                Spacer()
+                Text("\(completed)/\(total)")
+                    .contentTransition(.numericText(countsDown: false))
+                    .animation(.snappy(duration: 0.2), value: completed)
+                    .font(style.bodyFont(size: 13).weight(.semibold))
+                    .foregroundStyle(style == .boldStats ? style.accentColor : .secondary)
+            }
+            .padding(.horizontal, style.wrapsGroupsInCards ? 2 : 4)
         }
     }
 
@@ -570,7 +917,7 @@ struct BorderlessContentView: View {
         HStack(spacing: style.rowSpacing) {
             // 完成按钮：小票风格用方括号 [x]/[ ]，其他用渐变圆形
             Button {
-                withAnimation(.spring(duration: 0.25)) {
+                withAnimation(MotionTokens.toggle(reduceMotion: reduceMotion)) {
                     toggleTask(task)
                 }
                 let generator = UIImpactFeedbackGenerator(style: .light)
@@ -580,7 +927,7 @@ struct BorderlessContentView: View {
                     // 小票风格：[x] / [ ]
                     Text(task.isCompleted ? "[x]" : "[ ]")
                         .font(.system(size: 15, weight: .bold, design: .monospaced))
-                        .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                        .foregroundStyle(style == .terminal ? (task.isCompleted ? Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.4) : Color(red: 0.2, green: 0.95, blue: 0.45)) : (task.isCompleted ? .secondary : .primary))
                 } else {
                     ZStack {
                         if task.isCompleted {
@@ -590,12 +937,14 @@ struct BorderlessContentView: View {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 12, weight: .bold))
                                 .foregroundStyle(.white)
+                                .symbolEffect(.bounce, value: task.isCompleted)
                         } else {
                             Circle()
                                 .stroke(style.cardBorder(for: colorScheme), lineWidth: 1.5)
                                 .frame(width: 24, height: 24)
                         }
                     }
+                    .contentTransition(.opacity)
                 }
             }
             .buttonStyle(.plain)
@@ -604,11 +953,9 @@ struct BorderlessContentView: View {
             // 标题与元信息：小票风格用等宽字体
             VStack(alignment: .leading, spacing: 3) {
                 Text(task.title)
-                    .font(style.useMonospaceText
-                          ? .system(size: 15, weight: .medium, design: .monospaced)
-                          : .system(size: 16, weight: .medium))
+                    .font(style.bodyFont(size: 16))
                     .strikethrough(task.isCompleted && task.taskType != .reminder)
-                    .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                    .foregroundStyle(style == .terminal ? (task.isCompleted ? Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.45) : Color(red: 0.2, green: 0.95, blue: 0.45)) : (task.isCompleted ? .secondary : .primary))
 
                 if let scheduledTime = task.scheduledTime {
                     HStack(spacing: 4) {
@@ -619,10 +966,8 @@ struct BorderlessContentView: View {
                         Text(scheduledTime, style: .date)
                         Text(scheduledTime, style: .time)
                     }
-                    .font(style.useMonospaceText
-                          ? .system(size: 11, weight: .regular, design: .monospaced)
-                          : .caption)
-                    .foregroundStyle(.secondary)
+                    .font(style.bodyFont(size: 11))
+                    .foregroundStyle(style == .terminal ? Color(red: 0.2, green: 0.95, blue: 0.45).opacity(0.7) : .secondary)
                 }
             }
 
@@ -646,7 +991,7 @@ struct BorderlessContentView: View {
         .contentShape(Rectangle())
         .contextMenu {
             Button(role: .destructive) {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(MotionTokens.quickState(reduceMotion: reduceMotion)) {
                     deleteTask(task, from: group)
                 }
             } label: {
@@ -655,7 +1000,7 @@ struct BorderlessContentView: View {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(MotionTokens.quickState(reduceMotion: reduceMotion)) {
                     deleteTask(task, from: group)
                 }
             } label: {
@@ -961,7 +1306,7 @@ struct BorderlessContentView: View {
         let title = String(format: String(localized: "新分组 %lld"), Int64(taskGroups.count + 1))
         let newGroup = TaskGroup(
             title: title,
-            iconName: "folder.fill",
+            iconName: defaultGroupIconName(for: .todo),
             isPrivate: isPrivate,
             sortOrder: maxOrder + 1,
             tasks: []
@@ -986,7 +1331,7 @@ struct BorderlessContentView: View {
         let title = String(format: String(localized: "新打卡分组 %lld"), Int64(taskGroups.count + 1))
         let checkInGroup = TaskGroup(
             title: title,
-            iconName: "calendar",
+            iconName: defaultGroupIconName(for: .dailyCheckIn),
             isPrivate: isPrivate,
             sortOrder: maxOrder + 1,
             tasks: []
@@ -1011,7 +1356,7 @@ struct BorderlessContentView: View {
         let title = String(format: String(localized: "新提醒分组 %lld"), Int64(taskGroups.count + 1))
         let reminderGroup = TaskGroup(
             title: title,
-            iconName: "bell.badge.fill",
+            iconName: defaultGroupIconName(for: .reminder),
             isPrivate: isPrivate,
             sortOrder: maxOrder + 1,
             tasks: []
@@ -1034,6 +1379,7 @@ struct BorderlessContentView: View {
     private func syncActivitiesWithGroups() {
         Task { @MainActor in
             ActivityManager.shared.scheduleSyncActivities(groups: taskGroups)
+            AISummaryService.shared.requestSummaryUpdate(groups: taskGroups)
         }
     }
 

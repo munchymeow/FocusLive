@@ -33,6 +33,9 @@ struct RootTabView: View {
             persistLiveActivityAppearance(newValue)
             syncLiveActivitiesForAppearanceChange()
         }
+        .onChange(of: borderlessUIEnabled) { _, _ in
+            syncLiveActivitiesForAppearanceChange()
+        }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             persistLiveActivityAppearance()
@@ -44,12 +47,17 @@ struct RootTabView: View {
         TabView {
             ContentView()
                 .tabItem {
-                    Label("事项", systemImage: "checklist")
+                    Label(String(localized: "事项"), systemImage: "checklist")
+                }
+
+            AISummaryView()
+                .tabItem {
+                    Label(String(localized: "AI 总结"), systemImage: "sparkles")
                 }
 
             ProfileView()
                 .tabItem {
-                    Label("我的", systemImage: "person.fill")
+                    Label(String(localized: "我的"), systemImage: "person.fill")
                 }
         }
     }
